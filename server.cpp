@@ -1251,6 +1251,58 @@ std::string handleRegister(const std::string& json) {
     }
 }
 
+// Gửi thông báo tin nhắn chưa đọc khi user login
+void sendUnreadMessagesNotification(int clientSocket, const std::string& userId) {
+    std::vector<ChatMessage> unreadMessages;
+
+    {
+        std::lock_guard<std::mutex> lock(chatMutex);
+        for (auto& msg : chatMessages) {
+            if (msg.recipientId == userId && !msg.read) {
+                unreadMessages.push_back(msg);
+            }
+        }
+    }
+
+    if (unreadMessages.empty()) return;
+
+    // Tạo danh sách tin nhắn chưa đọc với tên người gửi
+    std::stringstream messagesJson;
+    messagesJson << "[";
+    bool first = true;
+
+    std::lock_guard<std::mutex> userLock(usersMutex);
+    for (const auto& msg : unreadMessages) {
+        std::string senderName = "Unknown";
+        auto senderIt = userById.find(msg.senderId);
+        if (senderIt != userById.end()) {
+            senderName = senderIt->second->fullname;
+        }
+
+        if (!first) messagesJson << ",";
+        first = false;
+
+        messagesJson << R"({"messageId":")" << msg.messageId
+                     << R"(","senderId":")" << msg.senderId
+                     << R"(","senderName":")" << escapeJson(senderName)
+                     << R"(","content":")" << escapeJson(msg.content)
+                     << R"(","timestamp":)" << msg.timestamp << "}";
+    }
+    messagesJson << "]";
+
+    std::string notification = R"({"messageType":"UNREAD_MESSAGES_NOTIFICATION","messageId":")" +
+                               generateId("notif") +
+                               R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                               R"(,"payload":{"unreadCount":)" + std::to_string(unreadMessages.size()) +
+                               R"(,"messages":)" + messagesJson.str() + R"(}})";
+
+    uint32_t len = htonl(notification.length());
+    send(clientSocket, &len, sizeof(len), 0);
+    send(clientSocket, notification.c_str(), notification.length(), 0);
+
+    logMessage("SEND", "Client:" + std::to_string(clientSocket), "UNREAD_MESSAGES_NOTIFICATION");
+}
+
 // Xử lý LOGIN_REQUEST
 std::string handleLogin(const std::string& json, int clientSocket) {
     std::string payload = getJsonObject(json, "payload");
@@ -1258,37 +1310,55 @@ std::string handleLogin(const std::string& json, int clientSocket) {
     std::string email = getJsonValue(payload, "email");
     std::string password = getJsonValue(payload, "password");
 
-    std::lock_guard<std::mutex> lock(usersMutex);
-
-    auto it = users.find(email);
-    if (it == users.end() || it->second.password != password) {
-        return R"({"messageType":"LOGIN_RESPONSE","messageId":")" + messageId +
-               R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
-               R"(,"payload":{"status":"error","message":"Invalid email or password"}})";
-    }
-
-    User& user = it->second;
-    user.online = true;
-    user.clientSocket = clientSocket;
-
-    std::string sessionToken = generateSessionToken();
-    Session session;
-    session.sessionToken = sessionToken;
-    session.userId = user.userId;
-    session.expiresAt = getCurrentTimestamp() + 3600000;
+    std::string userId;
+    std::string response;
 
     {
-        std::lock_guard<std::mutex> slock(sessionsMutex);
-        sessions[sessionToken] = session;
-        clientSessions[clientSocket] = sessionToken;
+        std::lock_guard<std::mutex> lock(usersMutex);
+
+        auto it = users.find(email);
+        if (it == users.end() || it->second.password != password) {
+            return R"({"messageType":"LOGIN_RESPONSE","messageId":")" + messageId +
+                   R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                   R"(,"payload":{"status":"error","message":"Invalid email or password"}})";
+        }
+
+        User& user = it->second;
+        user.online = true;
+        user.clientSocket = clientSocket;
+        userId = user.userId;
+
+        std::string sessionToken = generateSessionToken();
+        Session session;
+        session.sessionToken = sessionToken;
+        session.userId = user.userId;
+        session.expiresAt = getCurrentTimestamp() + 3600000;
+
+        {
+            std::lock_guard<std::mutex> slock(sessionsMutex);
+            sessions[sessionToken] = session;
+            clientSessions[clientSocket] = sessionToken;
+        }
+
+        response = R"({"messageType":"LOGIN_RESPONSE","messageId":")" + messageId +
+               R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+               R"(,"payload":{"status":"success","message":"Login successfully","data":{"userId":")" +
+               user.userId + R"(","fullname":")" + escapeJson(user.fullname) + R"(","email":")" +
+               user.email + R"(","level":")" + user.level + R"(","sessionToken":")" +
+               sessionToken + R"(","expiresAt":)" + std::to_string(session.expiresAt) + R"(}}})";
     }
 
-    return R"({"messageType":"LOGIN_RESPONSE","messageId":")" + messageId +
-           R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
-           R"(,"payload":{"status":"success","message":"Login successfully","data":{"userId":")" +
-           user.userId + R"(","fullname":")" + escapeJson(user.fullname) + R"(","email":")" +
-           user.email + R"(","level":")" + user.level + R"(","sessionToken":")" +
-           sessionToken + R"(","expiresAt":)" + std::to_string(session.expiresAt) + R"(}}})";
+    // Gửi response trước
+    uint32_t respLen = htonl(response.length());
+    send(clientSocket, &respLen, sizeof(respLen), 0);
+    send(clientSocket, response.c_str(), response.length(), 0);
+    logMessage("SEND", "Client:" + std::to_string(clientSocket), response);
+
+    // Sau đó gửi thông báo tin nhắn chưa đọc (nếu có)
+    sendUnreadMessagesNotification(clientSocket, userId);
+
+    // Trả về chuỗi rỗng để báo hiệu đã xử lý response
+    return "";
 }
 
 // Kiểm tra session hợp lệ
@@ -1687,6 +1757,36 @@ std::string handleSendMessage(const std::string& json, int senderSocket) {
            R"(,"delivered":)" + (delivered ? "true" : "false") + R"(}}})";
 }
 
+// Xử lý MARK_MESSAGES_READ_REQUEST - đánh dấu tin nhắn đã đọc
+std::string handleMarkMessagesRead(const std::string& json) {
+    std::string payload = getJsonObject(json, "payload");
+    std::string messageId = getJsonValue(json, "messageId");
+    std::string sessionToken = getJsonValue(json, "sessionToken");
+    std::string senderId = getJsonValue(payload, "senderId");
+
+    std::string userId = validateSession(sessionToken);
+    if (userId.empty()) {
+        return R"({"messageType":"MARK_MESSAGES_READ_RESPONSE","messageId":")" + messageId +
+               R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+               R"(,"payload":{"status":"error","message":"Invalid or expired session"}})";
+    }
+
+    int markedCount = 0;
+    {
+        std::lock_guard<std::mutex> lock(chatMutex);
+        for (auto& msg : chatMessages) {
+            if (msg.recipientId == userId && msg.senderId == senderId && !msg.read) {
+                msg.read = true;
+                markedCount++;
+            }
+        }
+    }
+
+    return R"({"messageType":"MARK_MESSAGES_READ_RESPONSE","messageId":")" + messageId +
+           R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+           R"(,"payload":{"status":"success","data":{"markedCount":)" + std::to_string(markedCount) + R"(}}})";
+}
+
 // Xử lý GET_CHAT_HISTORY_REQUEST
 std::string handleGetChatHistory(const std::string& json) {
     std::string payload = getJsonObject(json, "payload");
@@ -1807,6 +1907,10 @@ void handleClient(int clientSocket, struct sockaddr_in clientAddr) {
         }
         else if (messageType == "LOGIN_REQUEST") {
             response = handleLogin(message, clientSocket);
+            // handleLogin đã tự gửi response nên không cần gửi lại
+            if (response.empty()) {
+                continue;
+            }
         }
         else if (messageType == "GET_LESSONS_REQUEST") {
             response = handleGetLessons(message);
@@ -1831,6 +1935,9 @@ void handleClient(int clientSocket, struct sockaddr_in clientAddr) {
         }
         else if (messageType == "SET_LEVEL_REQUEST") {
             response = handleSetLevel(message);
+        }
+        else if (messageType == "MARK_MESSAGES_READ_REQUEST") {
+            response = handleMarkMessagesRead(message);
         }
         else {
             response = R"({"messageType":"ERROR_RESPONSE","timestamp":)" +

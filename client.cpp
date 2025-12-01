@@ -1,8 +1,12 @@
 /**
  * ============================================================================
- * ENGLISH LEARNING APP - CLIENT (Enhanced Version)
+ * ENGLISH LEARNING APP - CLIENT (Enhanced Version with Real-time Chat)
  * ============================================================================
  * Client với giao diện console tương tác, hỗ trợ đầy đủ các chức năng
+ *
+ * [FIX] Thêm background thread để nhận message từ server bất cứ lúc nào
+ * [FIX] Sử dụng message queue để đồng bộ giữa receive thread và main thread
+ * [FIX] Non-blocking receive cho real-time chat notification
  *
  * Compile: g++ -std=c++17 -pthread -o client client.cpp
  * Run: ./client [server_ip] [port]
@@ -21,6 +25,7 @@
 #include <vector>
 #include <queue>
 #include <condition_variable>
+#include <map>
 
 // POSIX socket headers
 #include <sys/socket.h>
@@ -29,6 +34,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <poll.h>
+#include <fcntl.h>
 
 // ============================================================================
 // CẤU HÌNH CLIENT
@@ -48,12 +54,29 @@ std::string currentLevel = "beginner";
 std::atomic<bool> running(true);
 std::atomic<bool> loggedIn(false);
 std::atomic<bool> inChatMode(false);
+
+// [FIX] Mutex để bảo vệ socket khi gửi dữ liệu
 std::mutex socketMutex;
 std::mutex printMutex;
 
-// Queue để nhận tin nhắn từ receive thread
-std::queue<std::string> incomingMessages;
-std::mutex msgQueueMutex;
+// [FIX] Queue để nhận response từ server (cho request-response pattern)
+std::queue<std::string> responseQueue;
+std::mutex responseQueueMutex;
+std::condition_variable responseCondition;
+
+// [FIX] Biến để lưu thông tin tin nhắn mới
+std::atomic<bool> hasNewNotification(false);
+std::string pendingChatUserId = "";
+std::string pendingChatUserName = "";
+std::mutex notificationMutex;
+
+// [FIX] Biến để kiểm soát việc hiển thị thông báo
+std::atomic<bool> canShowNotification(true);
+
+// [FIX] Lưu ID người đang chat để hiển thị tin nhắn trực tiếp thay vì popup
+std::string currentChatPartnerId = "";
+std::string currentChatPartnerName = "";
+std::mutex chatPartnerMutex;
 
 // ============================================================================
 // HÀM TIỆN ÍCH
@@ -70,8 +93,25 @@ std::string generateMessageId() {
     return "msg_" + std::to_string(++counter);
 }
 
+// [FIX] Hàm in có màu với mutex protection
 void printColored(const std::string& text, const std::string& color = "") {
     std::lock_guard<std::mutex> lock(printMutex);
+    if (color == "green") std::cout << "\033[32m";
+    else if (color == "red") std::cout << "\033[31m";
+    else if (color == "yellow") std::cout << "\033[33m";
+    else if (color == "blue") std::cout << "\033[34m";
+    else if (color == "cyan") std::cout << "\033[36m";
+    else if (color == "magenta") std::cout << "\033[35m";
+    else if (color == "bold") std::cout << "\033[1m";
+
+    std::cout << text;
+
+    if (!color.empty()) std::cout << "\033[0m";
+    std::cout << std::flush;
+}
+
+// [FIX] Hàm in không lock mutex (dùng khi đã có lock)
+void printColoredNoLock(const std::string& text, const std::string& color = "") {
     if (color == "green") std::cout << "\033[32m";
     else if (color == "red") std::cout << "\033[31m";
     else if (color == "yellow") std::cout << "\033[33m";
@@ -245,9 +285,182 @@ std::string escapeJson(const std::string& str) {
 }
 
 // ============================================================================
-// NETWORK FUNCTIONS
+// [FIX] PUSH NOTIFICATION HANDLER
+// Xử lý tin nhắn push từ server (tin nhắn chat real-time)
 // ============================================================================
 
+void handlePushNotification(const std::string& message) {
+    std::string messageType = getJsonValue(message, "messageType");
+
+    if (messageType == "RECEIVE_MESSAGE") {
+        // Tin nhắn chat real-time từ user khác
+        std::string payload = getJsonObject(message, "payload");
+        std::string senderId = getJsonValue(payload, "senderId");
+        std::string senderName = getJsonValue(payload, "senderName");
+        std::string messageContent = getJsonValue(payload, "messageContent");
+
+        // [FIX] Kiểm tra xem có đang chat với người này không
+        bool isChattingWithSender = false;
+        {
+            std::lock_guard<std::mutex> lock(chatPartnerMutex);
+            isChattingWithSender = (inChatMode && currentChatPartnerId == senderId);
+        }
+
+        if (isChattingWithSender) {
+            // [FIX] Đang chat với người này -> hiển thị tin nhắn trực tiếp
+            std::lock_guard<std::mutex> lock(printMutex);
+            std::cout << "\n\033[33m" << senderName << ": \033[0m" << messageContent << "\n";
+            std::cout << "\033[32mYou: \033[0m" << std::flush;
+        } else {
+            // Không đang chat với người này -> lưu thông báo và hiện popup
+            {
+                std::lock_guard<std::mutex> lock(notificationMutex);
+                pendingChatUserId = senderId;
+                pendingChatUserName = senderName;
+                hasNewNotification = true;
+            }
+
+            // Hiển thị popup thông báo
+            if (canShowNotification) {
+                std::lock_guard<std::mutex> lock(printMutex);
+                std::cout << "\n";
+                std::cout << "\033[33m╔══════════════════════════════════════════╗\033[0m\n";
+                std::cout << "\033[33m║  📬 NEW MESSAGE from \033[36m" << senderName << "\033[33m\033[0m\n";
+                std::cout << "\033[33m║  \033[0m\"" << messageContent << "\"\n";
+                std::cout << "\033[33m║  Press 'r' in menu to reply quickly      ║\033[0m\n";
+                std::cout << "\033[33m╚══════════════════════════════════════════╝\033[0m\n";
+                std::cout << std::flush;
+            }
+        }
+    }
+    else if (messageType == "UNREAD_MESSAGES_NOTIFICATION") {
+        // Thông báo có tin nhắn chưa đọc khi mới login
+        std::string payload = getJsonObject(message, "payload");
+        std::string unreadCount = getJsonValue(payload, "unreadCount");
+        std::string messagesArray = getJsonArray(payload, "messages");
+        std::vector<std::string> messages = parseJsonArray(messagesArray);
+
+        if (!messages.empty()) {
+            // Lưu thông tin người gửi cuối cùng
+            for (const std::string& msg : messages) {
+                std::lock_guard<std::mutex> nlock(notificationMutex);
+                pendingChatUserId = getJsonValue(msg, "senderId");
+                pendingChatUserName = getJsonValue(msg, "senderName");
+                hasNewNotification = true;
+            }
+
+            if (canShowNotification) {
+                std::lock_guard<std::mutex> lock(printMutex);
+                std::cout << "\n";
+                std::cout << "\033[33m╔══════════════════════════════════════════╗\033[0m\n";
+                std::cout << "\033[33m║  📬 You have \033[36m" << unreadCount << "\033[33m unread message(s)!          ║\033[0m\n";
+                std::cout << "\033[33m╠══════════════════════════════════════════╣\033[0m\n";
+
+                for (const std::string& msg : messages) {
+                    std::string senderName = getJsonValue(msg, "senderName");
+                    std::string content = getJsonValue(msg, "content");
+                    std::string preview = content.length() > 25 ? content.substr(0, 25) + "..." : content;
+                    std::cout << "\033[33m║  \033[36m" << senderName << "\033[0m: " << preview << "\n";
+                }
+
+                std::cout << "\033[33m╠══════════════════════════════════════════╣\033[0m\n";
+                std::cout << "\033[33m║  Go to Chat (option 4) to reply!         ║\033[0m\n";
+                std::cout << "\033[33m╚══════════════════════════════════════════╝\033[0m\n";
+                std::cout << std::flush;
+            }
+        }
+    }
+}
+
+// ============================================================================
+// [FIX] BACKGROUND RECEIVE THREAD
+// Thread chạy nền để liên tục nhận message từ server
+// Phân loại message: response (đưa vào queue) hoặc push notification (hiển thị)
+// ============================================================================
+
+void receiveThreadFunc() {
+    while (running && clientSocket >= 0) {
+        // Sử dụng poll để kiểm tra có dữ liệu không (non-blocking check)
+        struct pollfd pfd;
+        pfd.fd = clientSocket;
+        pfd.events = POLLIN;
+
+        int ret = poll(&pfd, 1, 100); // timeout 100ms để check running flag
+
+        if (ret < 0) {
+            if (running) {
+                printColored("\n[ERROR] Poll error\n", "red");
+            }
+            break;
+        }
+
+        if (ret == 0) {
+            // Timeout, không có dữ liệu, tiếp tục vòng lặp
+            continue;
+        }
+
+        if (pfd.revents & POLLIN) {
+            // Có dữ liệu để đọc
+            uint32_t msgLen = 0;
+            ssize_t bytesRead = recv(clientSocket, &msgLen, sizeof(msgLen), MSG_WAITALL);
+
+            if (bytesRead <= 0) {
+                if (running) {
+                    printColored("\n[INFO] Disconnected from server\n", "red");
+                    running = false;
+                }
+                break;
+            }
+
+            msgLen = ntohl(msgLen);
+            if (msgLen > BUFFER_SIZE - 1 || msgLen == 0) {
+                continue;
+            }
+
+            std::string buffer(msgLen, '\0');
+            size_t totalRead = 0;
+            while (totalRead < msgLen) {
+                ssize_t n = recv(clientSocket, &buffer[totalRead], msgLen - totalRead, 0);
+                if (n <= 0) {
+                    if (running) {
+                        running = false;
+                    }
+                    return;
+                }
+                totalRead += n;
+            }
+
+            // Phân loại message
+            std::string messageType = getJsonValue(buffer, "messageType");
+
+            if (messageType == "RECEIVE_MESSAGE" || messageType == "UNREAD_MESSAGES_NOTIFICATION") {
+                // [FIX] Đây là push notification, xử lý ngay
+                handlePushNotification(buffer);
+            } else {
+                // [FIX] Đây là response cho request, đưa vào queue
+                {
+                    std::lock_guard<std::mutex> lock(responseQueueMutex);
+                    responseQueue.push(buffer);
+                }
+                responseCondition.notify_one();
+            }
+        }
+
+        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            if (running) {
+                printColored("\n[INFO] Connection error\n", "red");
+                running = false;
+            }
+            break;
+        }
+    }
+}
+
+// ============================================================================
+// [FIX] NETWORK FUNCTIONS - Sửa để hoạt động với background thread
+// ============================================================================
+
+// Gửi message qua socket (thread-safe)
 bool sendMessage(const std::string& message) {
     std::lock_guard<std::mutex> lock(socketMutex);
 
@@ -268,41 +481,38 @@ bool sendMessage(const std::string& message) {
     return true;
 }
 
-std::string receiveMessage() {
-    uint32_t msgLen = 0;
-    ssize_t bytesRead = recv(clientSocket, &msgLen, sizeof(msgLen), MSG_WAITALL);
+// [FIX] Chờ và lấy response từ queue (được đẩy vào bởi receive thread)
+std::string waitForResponse(int timeoutMs = 10000) {
+    std::unique_lock<std::mutex> lock(responseQueueMutex);
 
-    if (bytesRead <= 0) {
+    // Chờ có response trong queue hoặc timeout
+    bool success = responseCondition.wait_for(lock, std::chrono::milliseconds(timeoutMs), []() {
+        return !responseQueue.empty() || !running;
+    });
+
+    if (!success || responseQueue.empty()) {
         return "";
     }
 
-    msgLen = ntohl(msgLen);
-    if (msgLen > BUFFER_SIZE - 1 || msgLen == 0) {
-        return "";
-    }
-
-    std::string buffer(msgLen, '\0');
-    size_t totalRead = 0;
-    while (totalRead < msgLen) {
-        ssize_t n = recv(clientSocket, &buffer[totalRead], msgLen - totalRead, 0);
-        if (n <= 0) return "";
-        totalRead += n;
-    }
-
-    return buffer;
+    std::string response = responseQueue.front();
+    responseQueue.pop();
+    return response;
 }
 
-// Gửi request và nhận response (blocking)
+// [FIX] Gửi request và chờ response (sử dụng queue thay vì blocking recv)
 std::string sendAndReceive(const std::string& request) {
     if (!sendMessage(request)) {
         return "";
     }
-    return receiveMessage();
+    return waitForResponse();
 }
 
 // ============================================================================
 // CÁC CHỨC NĂNG CHÍNH
 // ============================================================================
+
+// Forward declaration
+void openChatWith(const std::string& recipientId, const std::string& recipientName);
 
 void showMainMenu() {
     clearScreen();
@@ -322,6 +532,20 @@ void showMainMenu() {
     printColored("║  5. Logout                               ║\n", "");
     printColored("║  0. Exit                                 ║\n", "");
     printColored("╚══════════════════════════════════════════╝\n", "cyan");
+
+    // [FIX] Hiển thị thông báo tin nhắn mới nếu có
+    {
+        std::lock_guard<std::mutex> lock(notificationMutex);
+        if (hasNewNotification && !pendingChatUserName.empty()) {
+            printColored("╔══════════════════════════════════════════╗\n", "yellow");
+            printColored("║  📬 New message from ", "yellow");
+            printColored(pendingChatUserName, "cyan");
+            printColored("!\n", "yellow");
+            printColored("║  Press 'r' to reply quickly              ║\n", "yellow");
+            printColored("╚══════════════════════════════════════════╝\n", "yellow");
+        }
+    }
+
     printColored("Enter your choice: ", "green");
 }
 
@@ -791,14 +1015,163 @@ void takeTest() {
 }
 
 // ============================================================================
-// CHAT
+// [FIX] CHAT - Sửa để hiển thị lịch sử và nhận tin nhắn real-time
 // ============================================================================
+void trim(std::string &s) {
+    // Xóa ký tự trắng đầu
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(),
+        [](unsigned char ch){ return !std::isspace(ch); }));
+    // Xóa ký tự trắng cuối
+    s.erase(std::find_if(s.rbegin(), s.rend(),
+        [](unsigned char ch){ return !std::isspace(ch); }).base(), s.end());
+}
+
+// Hàm mở chat với một người dùng cụ thể
+void openChatWith(const std::string& recipientId, const std::string& recipientName) {
+    clearScreen();
+    printColored("╔══════════════════════════════════════════╗\n", "cyan");
+    printColored("║  Chatting with: ", "cyan");
+    printColored(recipientName, "yellow");
+    printColored("\n", "");
+    printColored("╠══════════════════════════════════════════╣\n", "cyan");
+    printColored("║  Type 'exit' to leave chat               ║\n", "magenta");
+    printColored("╚══════════════════════════════════════════╝\n\n", "cyan");
+
+    // Lấy lịch sử chat
+    std::string historyRequest = R"({"messageType":"GET_CHAT_HISTORY_REQUEST","messageId":")" + generateMessageId() +
+                                  R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                                  R"(,"sessionToken":")" + sessionToken +
+                                  R"(","payload":{"recipientId":")" + recipientId + R"("}})";
+
+    std::string historyResponse = sendAndReceive(historyRequest);
+    std::string historyStatus = getJsonValue(historyResponse, "status");
+
+    if (historyStatus == "success") {
+        std::string historyData = getJsonObject(historyResponse, "data");
+        std::string messagesArray = getJsonArray(historyData, "messages");
+        std::vector<std::string> messages = parseJsonArray(messagesArray);
+
+        if (!messages.empty()) {
+            printColored("--- Chat History ---\n", "magenta");
+            for (const std::string& msg : messages) {
+                std::string msgSenderId = getJsonValue(msg, "senderId");
+                std::string msgContent = getJsonValue(msg, "content");
+
+                if (msgSenderId == currentUserId) {
+                    printColored("You: ", "green");
+                    printColored(msgContent + "\n", "");
+                } else {
+                    printColored(recipientName + ": ", "yellow");
+                    printColored(msgContent + "\n", "");
+                }
+            }
+            printColored("--- End of History ---\n\n", "magenta");
+        }
+    }
+
+    // Đánh dấu tin nhắn đã đọc
+    std::string markReadRequest = R"({"messageType":"MARK_MESSAGES_READ_REQUEST","messageId":")" + generateMessageId() +
+                                   R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                                   R"(,"sessionToken":")" + sessionToken +
+                                   R"(","payload":{"senderId":")" + recipientId + R"("}})";
+    sendAndReceive(markReadRequest);
+
+    // Reset thông báo pending
+    {
+        std::lock_guard<std::mutex> lock(notificationMutex);
+        if (pendingChatUserId == recipientId) {
+            hasNewNotification = false;
+            pendingChatUserId = "";
+            pendingChatUserName = "";
+        }
+    }
+
+    // [FIX] Set người đang chat để hiển thị tin nhắn trực tiếp
+    {
+        std::lock_guard<std::mutex> lock(chatPartnerMutex);
+        currentChatPartnerId = recipientId;
+        currentChatPartnerName = recipientName;
+    }
+
+    inChatMode = true;
+    canShowNotification = true; // Cho phép hiển thị thông báo trong chat mode
+
+    while (inChatMode && running) {
+        printColored("You: ", "green");
+        std::string message;
+        std::getline(std::cin, message);
+
+        trim(message);  // [FIX] Loại bỏ khoảng trắng đầu/cuối
+        if (message == "exit") {
+            inChatMode = false;
+            break;
+        }
+        if (message.empty()) continue;
+
+        std::string chatRequest = R"({"messageType":"SEND_MESSAGE_REQUEST","messageId":")" + generateMessageId() +
+                                  R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                                  R"(,"sessionToken":")" + sessionToken +
+                                  R"(","payload":{"recipientId":")" + recipientId +
+                                  R"(","messageContent":")" + escapeJson(message) +
+                                  R"(","messageType":"text"}})";
+
+        std::string chatResponse = sendAndReceive(chatRequest);
+        std::string chatStatus = getJsonValue(chatResponse, "status");
+
+        if (chatStatus == "success") {
+            std::string chatData = getJsonObject(chatResponse, "data");
+            std::string delivered = getJsonValue(chatData, "delivered");
+            if (delivered == "true") {
+                printColored("[Delivered ✓]\n", "green");
+            } else {
+                printColored("[Sent - User offline]\n", "yellow");
+            }
+        } else {
+            std::string errorMsg = getJsonValue(chatResponse, "message");
+            printColored("[ERROR] " + errorMsg + "\n", "red");
+        }
+    }
+
+    // [FIX] Clear người đang chat khi thoát
+    {
+        std::lock_guard<std::mutex> lock(chatPartnerMutex);
+        currentChatPartnerId = "";
+        currentChatPartnerName = "";
+    }
+    inChatMode = false;
+}
 
 void chat() {
     clearScreen();
     printColored("╔══════════════════════════════════════════╗\n", "cyan");
     printColored("║                  CHAT                    ║\n", "cyan");
     printColored("╚══════════════════════════════════════════╝\n", "cyan");
+
+    // Kiểm tra xem có tin nhắn mới cần phản hồi không
+    std::string quickReplyId;
+    std::string quickReplyName;
+    {
+        std::lock_guard<std::mutex> lock(notificationMutex);
+        if (hasNewNotification && !pendingChatUserId.empty()) {
+            quickReplyId = pendingChatUserId;
+            quickReplyName = pendingChatUserName;
+        }
+    }
+
+    if (!quickReplyId.empty()) {
+        printColored("\n📬 You have a pending message from ", "yellow");
+        printColored(quickReplyName, "cyan");
+        printColored("\n", "");
+        printColored("Press 'r' to reply directly, or any other key to see contact list: ", "green");
+
+        std::string input;
+        std::getline(std::cin, input);
+
+        if (input == "r" || input == "R") {
+            openChatWith(quickReplyId, quickReplyName);
+            return;
+        }
+    }
 
     // Lấy danh sách contacts
     std::string request = R"({"messageType":"GET_CONTACT_LIST_REQUEST","messageId":")" + generateMessageId() +
@@ -871,54 +1244,7 @@ void chat() {
     std::string recipientId = contactList[choice - 1].first;
     std::string recipientName = contactList[choice - 1].second;
 
-    // Chat loop
-    clearScreen();
-    printColored("╔══════════════════════════════════════════╗\n", "cyan");
-    printColored("║  Chatting with: ", "cyan");
-    printColored(recipientName, "yellow");
-    printColored("\n", "");
-    printColored("╠══════════════════════════════════════════╣\n", "cyan");
-    printColored("║  Type 'exit' to leave chat               ║\n", "magenta");
-    printColored("╚══════════════════════════════════════════╝\n\n", "cyan");
-
-    inChatMode = true;
-
-    while (inChatMode) {
-        printColored("You: ", "green");
-        std::string message;
-        std::getline(std::cin, message);
-
-        if (message == "exit") {
-            inChatMode = false;
-            break;
-        }
-        if (message.empty()) continue;
-
-        std::string chatRequest = R"({"messageType":"SEND_MESSAGE_REQUEST","messageId":")" + generateMessageId() +
-                                  R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
-                                  R"(,"sessionToken":")" + sessionToken +
-                                  R"(","payload":{"recipientId":")" + recipientId +
-                                  R"(","messageContent":")" + escapeJson(message) +
-                                  R"(","messageType":"text"}})";
-
-        std::string chatResponse = sendAndReceive(chatRequest);
-        std::string chatStatus = getJsonValue(chatResponse, "status");
-
-        if (chatStatus == "success") {
-            std::string chatData = getJsonObject(chatResponse, "data");
-            std::string delivered = getJsonValue(chatData, "delivered");
-            if (delivered == "true") {
-                printColored("[Delivered ✓]\n", "green");
-            } else {
-                printColored("[Sent - User offline]\n", "yellow");
-            }
-        } else {
-            std::string errorMsg = getJsonValue(chatResponse, "message");
-            printColored("[ERROR] " + errorMsg + "\n", "red");
-        }
-    }
-
-    inChatMode = false;
+    openChatWith(recipientId, recipientName);
 }
 
 // ============================================================================
@@ -975,6 +1301,9 @@ int main(int argc, char* argv[]) {
 
     printColored("[SUCCESS] Connected to server!\n\n", "green");
 
+    // [FIX] Khởi động background thread để nhận message
+    std::thread recvThread(receiveThreadFunc);
+
     // Menu đăng nhập/đăng ký
     while (running && !loggedIn) {
         printColored("╔══════════════════════════════════════════╗\n", "cyan");
@@ -1004,6 +1333,10 @@ int main(int argc, char* argv[]) {
     }
 
     if (!loggedIn) {
+        running = false;
+        if (recvThread.joinable()) {
+            recvThread.join();
+        }
         close(clientSocket);
         return 0;
     }
@@ -1032,10 +1365,34 @@ int main(int argc, char* argv[]) {
             waitEnter();
         } else if (input == "0") {
             running = false;
+        } else if (input == "r" || input == "R") {
+            // [FIX] Phản hồi nhanh tin nhắn mới
+            std::string quickReplyId;
+            std::string quickReplyName;
+            {
+                std::lock_guard<std::mutex> lock(notificationMutex);
+                if (hasNewNotification && !pendingChatUserId.empty()) {
+                    quickReplyId = pendingChatUserId;
+                    quickReplyName = pendingChatUserName;
+                }
+            }
+            if (!quickReplyId.empty()) {
+                openChatWith(quickReplyId, quickReplyName);
+            } else {
+                printColored("\nNo pending messages to reply.\n", "yellow");
+                waitEnter();
+            }
         }
     }
 
     printColored("\nGoodbye! Thank you for using English Learning App.\n", "cyan");
+
+    // [FIX] Chờ receive thread kết thúc
+    running = false;
+    if (recvThread.joinable()) {
+        recvThread.join();
+    }
+
     close(clientSocket);
     return 0;
 }
