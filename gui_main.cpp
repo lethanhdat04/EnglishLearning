@@ -62,6 +62,17 @@ GtkWidget *btn_test_action;
 GtkWidget *entry_answer_text; // for fill_blank & sentence_order
 GtkWidget *lbl_words;         // shows words for sentence_order
 
+// Conversation auto-refresh state
+struct ConversationState {
+  GtkWidget *dialog;
+  GtkWidget *box_msgs;
+  std::string recipientId;
+  std::string recipientLabel;
+  int messageCount;
+  guint timeout_id;
+};
+static ConversationState *g_conv_state = nullptr;
+
 // Khai báo tên hàm
 void show_main_menu();
 void show_test_dialog();
@@ -718,6 +729,10 @@ void show_chat_dialog() {
   gtk_widget_show_all(dialog);
 }
 
+// Forward declaration for add_chat_bubble
+static void add_chat_bubble(GtkWidget *box, const std::string &content,
+                            bool isMine, const std::string &senderLabel);
+
 // Struct to pass data to the send callback
 struct ConversationContext {
   GtkWidget *box_msgs;
@@ -725,6 +740,86 @@ struct ConversationContext {
   std::string recipientId;
   std::string recipientLabel;
 };
+
+// Auto-refresh function: fetches new messages and updates UI
+static gboolean refresh_conversation_messages(gpointer data) {
+  if (!g_conv_state || !g_conv_state->dialog)
+    return FALSE; // Stop if window closed
+
+  // Fetch chat history again
+  std::string req = std::string("{\"messageType\":\"GET_CHAT_HISTORY_REQUEST\", "
+                                "\"sessionToken\":\"") +
+                    sessionToken + "\", \"payload\":{\"recipientId\":\"" +
+                    g_conv_state->recipientId + "\"}}";
+  if (!sendMessage(req))
+    return TRUE; // Keep trying
+
+  std::string resp = waitForResponse(1000);
+
+  // Count messages
+  int newCount = 0;
+  size_t pos = 0;
+  while ((pos = resp.find("\"senderId\"", pos)) != std::string::npos) {
+    newCount++;
+    pos += 10;
+  }
+
+  // If new messages, show notification and refresh
+  if (newCount > g_conv_state->messageCount) {
+    g_print("[CHAT] New messages! %d -> %d\n", g_conv_state->messageCount,
+            newCount);
+    g_conv_state->messageCount = newCount;
+
+    // Show notification
+    GtkWidget *notif = gtk_message_dialog_new(
+        NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
+        "📬 New message from %s!", g_conv_state->recipientLabel.c_str());
+    gtk_dialog_run(GTK_DIALOG(notif));
+    gtk_widget_destroy(notif);
+
+    // Clear and rebuild message list
+    gtk_container_foreach(GTK_CONTAINER(g_conv_state->box_msgs),
+                          (GtkCallback)gtk_widget_destroy, NULL);
+
+    // Re-parse and display all messages
+    std::vector<std::pair<std::string, std::string>> msgs;
+    pos = 0;
+    while ((pos = resp.find("\"senderId\"", pos)) != std::string::npos) {
+      size_t sStart = resp.find('"', pos + 10);
+      size_t sEnd = resp.find('"', sStart + 1);
+      std::string sid = resp.substr(sStart + 1, sEnd - sStart - 1);
+      size_t cPos = resp.find("\"content\"", pos);
+      if (cPos == std::string::npos)
+        break;
+      size_t cStart = resp.find('"', cPos + 9);
+      size_t cEnd = resp.find('"', cStart + 1);
+      std::string cont = resp.substr(cStart + 1, cEnd - cStart - 1);
+      size_t np = 0;
+      while ((np = cont.find("\\n", np)) != std::string::npos) {
+        cont.replace(np, 2, "\n");
+        np++;
+      }
+      msgs.emplace_back(sid, cont);
+      pos = cEnd + 1;
+    }
+
+    // Rebuild UI with all messages
+    for (auto &m : msgs) {
+      bool isMine = (m.first != g_conv_state->recipientId);
+      add_chat_bubble(g_conv_state->box_msgs, m.second, isMine,
+                      isMine ? "You" : g_conv_state->recipientLabel);
+    }
+    gtk_widget_show_all(g_conv_state->box_msgs);
+
+    // Scroll to bottom
+    GtkAdjustment *adj =
+        gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(
+            gtk_widget_get_parent(g_conv_state->box_msgs)));
+    gtk_adjustment_set_value(adj, gtk_adjustment_get_upper(adj));
+  }
+
+  return TRUE; // Keep the timer running
+}
 
 // Helper to add a chat bubble (reused for history and new messages)
 static void add_chat_bubble(GtkWidget *box, const std::string &content,
@@ -888,8 +983,30 @@ static void on_open_conversation_clicked(GtkWidget * /*widget*/,
                    G_CALLBACK(on_conversation_send_clicked),
                    &ctx); // Enter key to send
 
+  // Setup auto-refresh state
+  if (g_conv_state) {
+    if (g_conv_state->timeout_id > 0)
+      g_source_remove(g_conv_state->timeout_id);
+    delete g_conv_state;
+  }
+  g_conv_state = new ConversationState;
+  g_conv_state->dialog = conv;
+  g_conv_state->box_msgs = box_msgs;
+  g_conv_state->recipientId = recipientId;
+  g_conv_state->recipientLabel = recipientLabel;
+  g_conv_state->messageCount = (int)msgs.size();
+  // Start auto-refresh every 3 seconds (3000 ms)
+  g_conv_state->timeout_id = g_timeout_add(3000, refresh_conversation_messages, NULL);
+
   gtk_widget_show_all(conv);
   gtk_dialog_run(GTK_DIALOG(conv));
+
+  // Cleanup on close
+  if (g_conv_state->timeout_id > 0)
+    g_source_remove(g_conv_state->timeout_id);
+  delete g_conv_state;
+  g_conv_state = nullptr;
+
   gtk_widget_destroy(conv);
 }
 
