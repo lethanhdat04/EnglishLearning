@@ -44,6 +44,21 @@
 #define BUFFER_SIZE 65536
 
 // ============================================================================
+// PROTOCOL LAYER (Refactored to include/protocol/)
+// ============================================================================
+#include "include/protocol/all.h"
+
+// Using declarations for protocol utilities
+using english_learning::protocol::getJsonValue;
+using english_learning::protocol::getJsonObject;
+using english_learning::protocol::getJsonArray;
+using english_learning::protocol::parseJsonArray;
+using english_learning::protocol::escapeJson;
+using english_learning::protocol::unescapeJson;
+using english_learning::protocol::utils::getCurrentTimestamp;
+namespace MessageType = english_learning::protocol::MessageType;
+
+// ============================================================================
 // BIẾN TOÀN CỤC
 // ============================================================================
 int clientSocket = -1;
@@ -81,12 +96,7 @@ std::mutex chatPartnerMutex;
 // ============================================================================
 // HÀM TIỆN ÍCH
 // ============================================================================
-
-long long getCurrentTimestamp() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()
-    ).count();
-}
+// NOTE: getCurrentTimestamp() is now provided by include/protocol/utils.h
 
 std::string generateMessageId() {
     static int counter = 0;
@@ -135,154 +145,9 @@ void waitEnter() {
     std::cin.get();
 }
 
-// ============================================================================
-// JSON PARSER
-// ============================================================================
-
-std::string getJsonValue(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return "";
-
-    size_t colonPos = json.find(':', keyPos);
-    if (colonPos == std::string::npos) return "";
-
-    size_t valueStart = colonPos + 1;
-    while (valueStart < json.length() && (json[valueStart] == ' ' || json[valueStart] == '\t' || json[valueStart] == '\n')) {
-        valueStart++;
-    }
-
-    if (valueStart >= json.length()) return "";
-
-    if (json[valueStart] == '"') {
-        size_t valueEnd = valueStart + 1;
-        while (valueEnd < json.length()) {
-            if (json[valueEnd] == '"' && json[valueEnd - 1] != '\\') break;
-            valueEnd++;
-        }
-        if (valueEnd < json.length()) {
-            return json.substr(valueStart + 1, valueEnd - valueStart - 1);
-        }
-    } else {
-        size_t valueEnd = json.find_first_of(",}\n]", valueStart);
-        if (valueEnd != std::string::npos) {
-            std::string value = json.substr(valueStart, valueEnd - valueStart);
-            value.erase(0, value.find_first_not_of(" \t\n\r"));
-            if (!value.empty()) value.erase(value.find_last_not_of(" \t\n\r") + 1);
-            return value;
-        }
-    }
-
-    return "";
-}
-
-std::string getJsonObject(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return "";
-
-    size_t colonPos = json.find(':', keyPos);
-    if (colonPos == std::string::npos) return "";
-
-    size_t bracePos = json.find('{', colonPos);
-    if (bracePos == std::string::npos) return "";
-
-    int braceCount = 1;
-    size_t endPos = bracePos + 1;
-    while (endPos < json.length() && braceCount > 0) {
-        if (json[endPos] == '{') braceCount++;
-        else if (json[endPos] == '}') braceCount--;
-        endPos++;
-    }
-
-    return json.substr(bracePos, endPos - bracePos);
-}
-
-std::string getJsonArray(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return "";
-
-    size_t colonPos = json.find(':', keyPos);
-    if (colonPos == std::string::npos) return "";
-
-    size_t bracketPos = json.find('[', colonPos);
-    if (bracketPos == std::string::npos) return "";
-
-    int bracketCount = 1;
-    size_t endPos = bracketPos + 1;
-    while (endPos < json.length() && bracketCount > 0) {
-        if (json[endPos] == '[') bracketCount++;
-        else if (json[endPos] == ']') bracketCount--;
-        endPos++;
-    }
-
-    return json.substr(bracketPos, endPos - bracketPos);
-}
-
-std::vector<std::string> parseJsonArray(const std::string& arrayStr) {
-    std::vector<std::string> result;
-    if (arrayStr.empty() || arrayStr[0] != '[') return result;
-
-    size_t pos = 1;
-    while (pos < arrayStr.length()) {
-        while (pos < arrayStr.length() && (arrayStr[pos] == ' ' || arrayStr[pos] == '\n' || arrayStr[pos] == '\t' || arrayStr[pos] == ',')) {
-            pos++;
-        }
-
-        if (pos >= arrayStr.length() || arrayStr[pos] == ']') break;
-
-        if (arrayStr[pos] == '{') {
-            int braceCount = 1;
-            size_t start = pos;
-            pos++;
-            while (pos < arrayStr.length() && braceCount > 0) {
-                if (arrayStr[pos] == '{') braceCount++;
-                else if (arrayStr[pos] == '}') braceCount--;
-                pos++;
-            }
-            result.push_back(arrayStr.substr(start, pos - start));
-        } else {
-            pos++;
-        }
-    }
-
-    return result;
-}
-
-std::string unescapeJson(const std::string& str) {
-    std::string result;
-    for (size_t i = 0; i < str.length(); i++) {
-        if (str[i] == '\\' && i + 1 < str.length()) {
-            switch (str[i + 1]) {
-                case 'n': result += '\n'; i++; break;
-                case 'r': result += '\r'; i++; break;
-                case 't': result += '\t'; i++; break;
-                case '"': result += '"'; i++; break;
-                case '\\': result += '\\'; i++; break;
-                default: result += str[i];
-            }
-        } else {
-            result += str[i];
-        }
-    }
-    return result;
-}
-
-std::string escapeJson(const std::string& str) {
-    std::string result;
-    for (char c : str) {
-        switch (c) {
-            case '"': result += "\\\""; break;
-            case '\\': result += "\\\\"; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            default: result += c;
-        }
-    }
-    return result;
-}
+// NOTE: JSON parsing functions (getJsonValue, getJsonObject, getJsonArray,
+// parseJsonArray, escapeJson, unescapeJson) are now provided by
+// include/protocol/json_parser.h
 
 // ============================================================================
 // [FIX] PUSH NOTIFICATION HANDLER

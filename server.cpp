@@ -40,130 +40,44 @@
 #define MAX_CLIENTS 100
 
 // ============================================================================
-// CẤU TRÚC DỮ LIỆU
+// CORE DOMAIN MODELS (Refactored to include/core/)
 // ============================================================================
+#include "include/core/all.h"
 
-// Thông tin người dùng
-struct User {
-    std::string userId;
-    std::string fullname;
-    std::string email;
-    std::string password;
-    std::string level;      // beginner, intermediate, advanced
-    std::string role;       // student, teacher, admin
-    long long createdAt;
-    bool online;
-    int clientSocket;       // Socket của client đang kết nối
-};
+// Type aliases for backward compatibility with existing code
+using User = english_learning::core::User;
+using Session = english_learning::core::Session;
+using Lesson = english_learning::core::Lesson;
+using TestQuestion = english_learning::core::TestQuestion;
+using Test = english_learning::core::Test;
+using ChatMessage = english_learning::core::ChatMessage;
+using Exercise = english_learning::core::Exercise;
+using ExerciseSubmission = english_learning::core::ExerciseSubmission;
+using Game = english_learning::core::Game;
+using GameSession = english_learning::core::GameSession;
 
-// Thông tin session
-struct Session {
-    std::string sessionToken;
-    std::string userId;
-    long long expiresAt;
-};
+// ============================================================================
+// PROTOCOL LAYER (Refactored to include/protocol/)
+// ============================================================================
+#include "include/protocol/all.h"
 
-// Thông tin bài học
-struct Lesson {
-    std::string lessonId;
-    std::string title;
-    std::string description;
-    std::string topic;      // grammar, vocabulary, listening, speaking, reading, writing
-    std::string level;
-    int duration;
-    std::string textContent;
-    std::string videoUrl;
-    std::string audioUrl;
-};
+// ============================================================================
+// SERVICE LAYER (Refactored architecture)
+// ============================================================================
+#include "src/repository/bridge/bridge_repositories.h"
+#include "src/repository/bridge/bridge_repositories_ext.h"
+#include "src/service/all.h"
 
-// Thông tin câu hỏi test
-struct TestQuestion {
-    std::string questionId;
-    std::string type;       // multiple_choice, fill_blank, sentence_order
-    std::string question;
-    std::vector<std::string> options;
-    std::string correctAnswer;
-    std::vector<std::string> words;  // For sentence_order type
-    int points;
-};
-
-// Thông tin bài test
-struct Test {
-    std::string testId;
-    std::string testType;
-    std::string level;
-    std::string topic;
-    std::string title;
-    std::vector<TestQuestion> questions;
-};
-
-// Thông tin tin nhắn chat
-struct ChatMessage {
-    std::string messageId;
-    std::string senderId;
-    std::string recipientId;
-    std::string content;
-    long long timestamp;
-    bool read;
-};
-
-// Thông tin bài tập
-struct Exercise {
-    std::string exerciseId;
-    std::string exerciseType;  // sentence_rewrite, paragraph_writing, topic_speaking
-    std::string title;
-    std::string description;
-    std::string instructions;
-    std::string level;
-    std::string topic;
-    std::vector<std::string> prompts;  // For sentence_rewrite: original sentences
-    std::string topicDescription;  // For topic_speaking and paragraph_writing
-    std::vector<std::string> requirements;  // For paragraph_writing: requirements list
-    int duration;  // Minutes
-};
-
-// Thông tin bài nộp bài tập
-struct ExerciseSubmission {
-    std::string submissionId;
-    std::string exerciseId;
-    std::string userId;
-    std::string exerciseType;
-    std::string content;  // Answers or written text or audio URL
-    std::string status;  // pending, reviewed
-    long long submittedAt;
-    std::string teacherId;  // Who reviewed it
-    std::string teacherFeedback;
-    int teacherScore;  // 0-100
-    long long reviewedAt;
-};
-
-// Thông tin trò chơi
-struct Game {
-    std::string gameId;
-    std::string gameType;  // word_match, sentence_match, picture_match
-    std::string title;
-    std::string description;
-    std::string level;
-    std::string topic;
-    std::vector<std::pair<std::string, std::string>> pairs;  // For word_match: (word, meaning)
-    std::vector<std::pair<std::string, std::string>> sentencePairs;  // For sentence_match: (sentence1, sentence2)
-    std::vector<std::pair<std::string, std::string>> picturePairs;  // For picture_match: (word, imageUrl)
-    int timeLimit;  // Seconds
-    int maxScore;
-};
-
-// Thông tin phiên chơi game
-struct GameSession {
-    std::string sessionId;
-    std::string gameId;
-    std::string userId;
-    long long startTime;
-    long long endTime;
-    int score;
-    int maxScore;
-    std::map<std::string, std::string> answers;  // For tracking matches
-    bool completed;
-};
+// Using declarations for protocol utilities
+using english_learning::protocol::getJsonValue;
+using english_learning::protocol::getJsonObject;
+using english_learning::protocol::getJsonArray;
+using english_learning::protocol::parseJsonArray;
+using english_learning::protocol::escapeJson;
+using english_learning::protocol::utils::getCurrentTimestamp;
+using english_learning::protocol::utils::generateId;
+using english_learning::protocol::utils::generateSessionToken;
+namespace MessageType = english_learning::protocol::MessageType;
 
 // ============================================================================
 // BIẾN TOÀN CỤC VÀ MUTEX
@@ -191,39 +105,24 @@ int serverSocket = -1;
 bool running = true;
 
 // ============================================================================
+// SERVICE LAYER INTEGRATION
+// ============================================================================
+// Bridge repositories and service container (initialized in main())
+// These wrap the global data structures above, enabling gradual migration
+// to the service layer while maintaining backward compatibility.
+namespace bridge = english_learning::repository::bridge;
+namespace service = english_learning::service;
+
+std::unique_ptr<service::ServiceContainer> serviceContainer;
+
+// ============================================================================
 // HÀM TIỆN ÍCH
 // ============================================================================
 bool isAdmin(const std::string& userId);
 bool isTeacher(const std::string& userId);
 
-// Lấy timestamp hiện tại (milliseconds)
-long long getCurrentTimestamp() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()
-    ).count();
-}
-
-// Sinh ID ngẫu nhiên
-std::string generateId(const std::string& prefix) {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    static std::uniform_int_distribution<> dis(10000, 99999);
-    return prefix + "_" + std::to_string(dis(gen));
-}
-
-// Sinh session token đơn giản
-std::string generateSessionToken() {
-    static const char alphanum[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    std::string token;
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    static std::uniform_int_distribution<> dis(0, sizeof(alphanum) - 2);
-
-    for (int i = 0; i < 64; ++i) {
-        token += alphanum[dis(gen)];
-    }
-    return token;
-}
+// NOTE: getCurrentTimestamp(), generateId(), generateSessionToken()
+// are now provided by include/protocol/utils.h
 
 // Ghi log
 void logMessage(const std::string& direction, const std::string& clientInfo, const std::string& message) {
@@ -249,135 +148,8 @@ void logMessage(const std::string& direction, const std::string& clientInfo, con
     }
 }
 
-// Escape JSON string
-std::string escapeJson(const std::string& str) {
-    std::string result;
-    for (char c : str) {
-        switch (c) {
-            case '"': result += "\\\""; break;
-            case '\\': result += "\\\\"; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            default: result += c;
-        }
-    }
-    return result;
-}
-
-// ============================================================================
-// JSON PARSER ĐƠN GIẢN
-// ============================================================================
-
-std::string getJsonValue(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return "";
-
-    size_t colonPos = json.find(':', keyPos);
-    if (colonPos == std::string::npos) return "";
-
-    size_t valueStart = colonPos + 1;
-    while (valueStart < json.length() && (json[valueStart] == ' ' || json[valueStart] == '\t' || json[valueStart] == '\n')) {
-        valueStart++;
-    }
-
-    if (valueStart >= json.length()) return "";
-
-    if (json[valueStart] == '"') {
-        size_t valueEnd = valueStart + 1;
-        while (valueEnd < json.length()) {
-            if (json[valueEnd] == '"' && json[valueEnd - 1] != '\\') {
-                break;
-            }
-            valueEnd++;
-        }
-        if (valueEnd < json.length()) {
-            return json.substr(valueStart + 1, valueEnd - valueStart - 1);
-        }
-    } else {
-        size_t valueEnd = json.find_first_of(",}\n]", valueStart);
-        if (valueEnd != std::string::npos) {
-            std::string value = json.substr(valueStart, valueEnd - valueStart);
-            value.erase(0, value.find_first_not_of(" \t\n\r"));
-            value.erase(value.find_last_not_of(" \t\n\r") + 1);
-            return value;
-        }
-    }
-
-    return "";
-}
-
-std::string getJsonObject(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return "";
-
-    size_t colonPos = json.find(':', keyPos);
-    if (colonPos == std::string::npos) return "";
-
-    size_t bracePos = json.find('{', colonPos);
-    if (bracePos == std::string::npos) return "";
-
-    int braceCount = 1;
-    size_t endPos = bracePos + 1;
-    while (endPos < json.length() && braceCount > 0) {
-        if (json[endPos] == '{') braceCount++;
-        else if (json[endPos] == '}') braceCount--;
-        endPos++;
-    }
-
-    return json.substr(bracePos, endPos - bracePos);
-}
-
-std::string getJsonArray(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return "";
-
-    size_t colonPos = json.find(':', keyPos);
-    if (colonPos == std::string::npos) return "";
-
-    size_t bracketPos = json.find('[', colonPos);
-    if (bracketPos == std::string::npos) return "";
-
-    int bracketCount = 1;
-    size_t endPos = bracketPos + 1;
-    while (endPos < json.length() && bracketCount > 0) {
-        if (json[endPos] == '[') bracketCount++;
-        else if (json[endPos] == ']') bracketCount--;
-        endPos++;
-    }
-
-    return json.substr(bracketPos, endPos - bracketPos);
-}
-
-std::vector<std::string> parseJsonArray(const std::string& arrayStr) {
-    std::vector<std::string> result;
-    if (arrayStr.empty() || arrayStr[0] != '[') return result;
-
-    size_t pos = 1;
-    while (pos < arrayStr.length()) {
-        while (pos < arrayStr.length() && (arrayStr[pos] == ' ' || arrayStr[pos] == '\n' || arrayStr[pos] == '\t' || arrayStr[pos] == ',')) {
-            pos++;
-        }
-        if (pos >= arrayStr.length() || arrayStr[pos] == ']') break;
-        if (arrayStr[pos] == '{') {
-            int braceCount = 1;
-            size_t start = pos;
-            pos++;
-            while (pos < arrayStr.length() && braceCount > 0) {
-                if (arrayStr[pos] == '{') braceCount++;
-                else if (arrayStr[pos] == '}') braceCount--;
-                pos++;
-            }
-            result.push_back(arrayStr.substr(start, pos - start));
-        } else {
-            pos++;
-        }
-    }
-    return result;
-}
+// NOTE: escapeJson(), getJsonValue(), getJsonObject(), getJsonArray(), parseJsonArray()
+// are now provided by include/protocol/json_parser.h
 
 // ============================================================================
 // KHỞI TẠO DỮ LIỆU MẪU - PHONG PHÚ
@@ -1643,6 +1415,58 @@ std::string handleLogin(const std::string& json, int clientSocket) {
 
     // Trả về chuỗi rỗng để báo hiệu đã xử lý response
     return "";
+}
+
+// ============================================================================
+// SERVICE LAYER DEMONSTRATION - handleLoginV2
+// ============================================================================
+// This is a demonstration of how handlers can be migrated to use the service
+// layer instead of directly manipulating global data structures.
+//
+// Benefits:
+// - Business logic is encapsulated in AuthService
+// - Handler only deals with JSON parsing and response formatting
+// - Easier to unit test (service can be mocked)
+// - Thread safety handled by bridge repositories
+// ============================================================================
+std::string handleLoginV2(const std::string& json, int clientSocket) {
+    std::string payload = getJsonObject(json, "payload");
+    std::string messageId = getJsonValue(json, "messageId");
+    std::string email = getJsonValue(payload, "email");
+    std::string password = getJsonValue(payload, "password");
+
+    // Use the service layer for authentication
+    auto result = serviceContainer->auth().login(email, password, clientSocket);
+
+    std::string response;
+    if (!result.isSuccess()) {
+        // Error case - service provides the error message
+        response = R"({"messageType":"LOGIN_RESPONSE","messageId":")" + messageId +
+                   R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                   R"(,"payload":{"status":"error","message":")" + escapeJson(result.getMessage()) + R"("}})";
+    } else {
+        // Success case - build response from LoginResult DTO
+        const auto& data = result.getData();
+        response = R"({"messageType":"LOGIN_RESPONSE","messageId":")" + messageId +
+                   R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                   R"(,"payload":{"status":"success","message":"Login successfully","data":{"userId":")" +
+                   data.userId + R"(","fullname":")" + escapeJson(data.fullname) + R"(","email":")" +
+                   data.email + R"(","level":")" + data.level + R"(","sessionToken":")" +
+                   data.sessionToken + R"(","expiresAt":)" + std::to_string(data.expiresAt) + R"(}}})";
+    }
+
+    // Send response
+    uint32_t respLen = htonl(response.length());
+    send(clientSocket, &respLen, sizeof(respLen), 0);
+    send(clientSocket, response.c_str(), response.length(), 0);
+    logMessage("SEND", "Client:" + std::to_string(clientSocket), response);
+
+    // Send unread messages notification if login successful
+    if (result.isSuccess()) {
+        sendUnreadMessagesNotification(clientSocket, result.getData().userId);
+    }
+
+    return "";  // Response already sent
 }
 
 // Kiểm tra session hợp lệ
@@ -3222,6 +3046,25 @@ int main(int argc, char* argv[]) {
     signal(SIGPIPE, SIG_IGN);
 
     initSampleData();
+
+    // ========================================================================
+    // INITIALIZE SERVICE LAYER
+    // ========================================================================
+    // Create bridge repositories that wrap the global data structures
+    static bridge::BridgeUserRepository userRepo(users, userById, usersMutex);
+    static bridge::BridgeSessionRepository sessionRepo(sessions, clientSessions, sessionsMutex);
+    static bridge::BridgeLessonRepository lessonRepo(lessons);
+    static bridge::BridgeTestRepository testRepo(tests);
+    static bridge::BridgeChatRepository chatRepo(chatMessages, chatMutex);
+    static bridge::BridgeExerciseRepository exerciseRepo(exercises, exerciseSubmissions, exercisesMutex);
+    static bridge::BridgeGameRepository gameRepo(games, gameSessions, gamesMutex);
+
+    // Create service container with dependency injection
+    serviceContainer = std::make_unique<service::ServiceContainer>(
+        userRepo, sessionRepo, lessonRepo, testRepo, chatRepo, exerciseRepo, gameRepo);
+
+    std::cout << "[INFO] Service layer initialized" << std::endl;
+    // ========================================================================
 
     serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (serverSocket < 0) {
