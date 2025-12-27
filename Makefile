@@ -82,7 +82,7 @@ client: client.cpp $(PROTOCOL_HEADERS) $(PROTOCOL_SOURCES)
 	@echo "Client compiled successfully!"
 
 gui: gui_main.cpp client.cpp $(PROTOCOL_HEADERS) $(PROTOCOL_SOURCES)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -DCLIENT_SKIP_MAIN gui_main.cpp client.cpp $(PROTOCOL_SOURCES) -o gui_app $(GTK_CFLAGS) $(GTK_LIBS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(GTK_CFLAGS) -DCLIENT_SKIP_MAIN gui_main.cpp client.cpp $(PROTOCOL_SOURCES) -o gui_app $(GTK_LIBS)
 	@echo "GUI App compiled successfully! Run with: ./gui_app"
 
 clean:

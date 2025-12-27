@@ -200,6 +200,563 @@ static void on_play_audio_clicked(GtkWidget *widget, gpointer data) {
 }
 
 // =========================================================
+// PICTURE MATCH GAME - GTK IMAGE RENDERING
+// =========================================================
+
+// Structure to hold picture match game state
+struct PictureMatchState {
+  GtkWidget *dialog;
+  GtkWidget *grid;
+  std::vector<GtkWidget *> imageButtons;  // Image buttons (left side)
+  std::vector<GtkWidget *> wordButtons;   // Word buttons (right side)
+  std::vector<std::pair<std::string, std::string>> pairs;  // (word, imageSource)
+  int selectedImageIndex;      // Currently selected image (-1 = none)
+  int selectedWordIndex;       // Currently selected word (-1 = none)
+  std::vector<bool> matchedImages;  // Which images have been matched
+  std::vector<bool> matchedWords;   // Which words have been matched
+  std::vector<std::pair<int, int>> matches;  // Recorded matches (image_idx, word_idx)
+  std::string gameSessionId;
+  std::string gameId;
+  int correctMatches;
+  int totalPairs;
+};
+
+static PictureMatchState *g_pm_state = nullptr;
+
+// Parse placeholder format: "placeholder:color:emoji"
+static bool parse_placeholder_format(const std::string &source,
+                                     std::string &color, std::string &emoji) {
+  if (source.find("placeholder:") != 0)
+    return false;
+
+  size_t firstColon = source.find(':', 0);
+  size_t secondColon = source.find(':', firstColon + 1);
+
+  if (firstColon == std::string::npos || secondColon == std::string::npos)
+    return false;
+
+  color = source.substr(firstColon + 1, secondColon - firstColon - 1);
+  emoji = source.substr(secondColon + 1);
+  return true;
+}
+
+// Parse hex color string to RGB values
+static void parse_hex_color(const std::string &hexColor, double &r, double &g,
+                            double &b) {
+  std::string hex = hexColor;
+  if (!hex.empty() && hex[0] == '#')
+    hex = hex.substr(1);
+
+  if (hex.length() >= 6) {
+    int ri = std::stoi(hex.substr(0, 2), nullptr, 16);
+    int gi = std::stoi(hex.substr(2, 2), nullptr, 16);
+    int bi = std::stoi(hex.substr(4, 2), nullptr, 16);
+    r = ri / 255.0;
+    g = gi / 255.0;
+    b = bi / 255.0;
+  } else {
+    r = 0.5;
+    g = 0.5;
+    b = 0.5;
+  }
+}
+
+// Create a placeholder pixbuf with color and emoji using Cairo
+static GdkPixbuf *create_placeholder_pixbuf(const std::string &color,
+                                            const std::string &emoji,
+                                            int width, int height) {
+  // Create Cairo surface
+  cairo_surface_t *surface =
+      cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+  cairo_t *cr = cairo_create(surface);
+
+  // Parse and fill background color
+  double r, g, b;
+  parse_hex_color(color, r, g, b);
+
+  // Draw rounded rectangle background
+  double radius = 12.0;
+  double x = 0, y = 0, w = width, h = height;
+
+  cairo_new_path(cr);
+  cairo_arc(cr, x + w - radius, y + radius, radius, -G_PI / 2, 0);
+  cairo_arc(cr, x + w - radius, y + h - radius, radius, 0, G_PI / 2);
+  cairo_arc(cr, x + radius, y + h - radius, radius, G_PI / 2, G_PI);
+  cairo_arc(cr, x + radius, y + radius, radius, G_PI, 3 * G_PI / 2);
+  cairo_close_path(cr);
+
+  cairo_set_source_rgb(cr, r, g, b);
+  cairo_fill_preserve(cr);
+
+  // Draw border
+  cairo_set_source_rgb(cr, r * 0.7, g * 0.7, b * 0.7);
+  cairo_set_line_width(cr, 3.0);
+  cairo_stroke(cr);
+
+  // Draw emoji text centered
+  cairo_select_font_face(cr, "Noto Color Emoji", CAIRO_FONT_SLANT_NORMAL,
+                         CAIRO_FONT_WEIGHT_NORMAL);
+  cairo_set_font_size(cr, height * 0.5);
+
+  cairo_text_extents_t extents;
+  cairo_text_extents(cr, emoji.c_str(), &extents);
+
+  double tx = (width - extents.width) / 2 - extents.x_bearing;
+  double ty = (height - extents.height) / 2 - extents.y_bearing;
+
+  // Draw emoji with shadow
+  cairo_set_source_rgba(cr, 0, 0, 0, 0.3);
+  cairo_move_to(cr, tx + 2, ty + 2);
+  cairo_show_text(cr, emoji.c_str());
+
+  cairo_set_source_rgb(cr, 1, 1, 1);
+  cairo_move_to(cr, tx, ty);
+  cairo_show_text(cr, emoji.c_str());
+
+  // Convert Cairo surface to GdkPixbuf
+  cairo_surface_flush(surface);
+  unsigned char *data = cairo_image_surface_get_data(surface);
+  int stride = cairo_image_surface_get_stride(surface);
+
+  // Create pixbuf from Cairo data (ARGB -> RGBA conversion)
+  GdkPixbuf *pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, width, height);
+  guchar *pixels = gdk_pixbuf_get_pixels(pixbuf);
+  int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
+
+  for (int row = 0; row < height; row++) {
+    for (int col = 0; col < width; col++) {
+      unsigned char *src = data + row * stride + col * 4;
+      guchar *dst = pixels + row * rowstride + col * 4;
+      // Cairo uses BGRA, GdkPixbuf uses RGBA
+      dst[0] = src[2];  // R
+      dst[1] = src[1];  // G
+      dst[2] = src[0];  // B
+      dst[3] = src[3];  // A
+    }
+  }
+
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+
+  return pixbuf;
+}
+
+// Load image from various sources
+static GdkPixbuf *load_game_image(const std::string &source, int width,
+                                  int height) {
+  GdkPixbuf *pixbuf = nullptr;
+
+  // Check if it's a placeholder format
+  std::string color, emoji;
+  if (parse_placeholder_format(source, color, emoji)) {
+    pixbuf = create_placeholder_pixbuf(color, emoji, width, height);
+  }
+  // Check if it's a local file
+  else if (source.find("http://") != 0 && source.find("https://") != 0) {
+    GError *error = nullptr;
+    pixbuf = gdk_pixbuf_new_from_file_at_scale(source.c_str(), width, height,
+                                               TRUE, &error);
+    if (error) {
+      g_warning("Failed to load image %s: %s", source.c_str(), error->message);
+      g_error_free(error);
+      // Create error placeholder
+      pixbuf = create_placeholder_pixbuf("#888888", "❌", width, height);
+    }
+  }
+  // URL - create placeholder with URL indicator
+  else {
+    pixbuf = create_placeholder_pixbuf("#3498DB", "🌐", width, height);
+  }
+
+  return pixbuf;
+}
+
+// Callback when image button is clicked
+static void on_pm_image_clicked(GtkWidget *widget, gpointer data) {
+  if (!g_pm_state)
+    return;
+
+  int index = GPOINTER_TO_INT(data);
+
+  // If already matched, ignore
+  if (g_pm_state->matchedImages[index])
+    return;
+
+  // Deselect previous selection
+  if (g_pm_state->selectedImageIndex >= 0) {
+    GtkWidget *prevBtn = g_pm_state->imageButtons[g_pm_state->selectedImageIndex];
+    GtkStyleContext *prevCtx = gtk_widget_get_style_context(prevBtn);
+    gtk_style_context_remove_class(prevCtx, "selected");
+  }
+
+  // Select this image
+  g_pm_state->selectedImageIndex = index;
+  GtkStyleContext *ctx = gtk_widget_get_style_context(widget);
+  gtk_style_context_add_class(ctx, "selected");
+
+  // Check if we have both selections for a match
+  if (g_pm_state->selectedWordIndex >= 0) {
+    int imgIdx = g_pm_state->selectedImageIndex;
+    int wordIdx = g_pm_state->selectedWordIndex;
+
+    // Record the match
+    g_pm_state->matches.push_back({imgIdx, wordIdx});
+    g_pm_state->matchedImages[imgIdx] = true;
+    g_pm_state->matchedWords[wordIdx] = true;
+
+    // Update button styles
+    GtkWidget *imgBtn = g_pm_state->imageButtons[imgIdx];
+    GtkWidget *wordBtn = g_pm_state->wordButtons[wordIdx];
+
+    GtkStyleContext *imgCtx = gtk_widget_get_style_context(imgBtn);
+    GtkStyleContext *wordCtx = gtk_widget_get_style_context(wordBtn);
+
+    gtk_style_context_remove_class(imgCtx, "selected");
+    gtk_style_context_remove_class(wordCtx, "selected");
+    gtk_style_context_add_class(imgCtx, "matched");
+    gtk_style_context_add_class(wordCtx, "matched");
+
+    // Make buttons insensitive
+    gtk_widget_set_sensitive(imgBtn, FALSE);
+    gtk_widget_set_sensitive(wordBtn, FALSE);
+
+    // Reset selections
+    g_pm_state->selectedImageIndex = -1;
+    g_pm_state->selectedWordIndex = -1;
+
+    g_print("[MATCH] Image %d matched with Word %d\n", imgIdx, wordIdx);
+  }
+}
+
+// Callback when word button is clicked
+static void on_pm_word_clicked(GtkWidget *widget, gpointer data) {
+  if (!g_pm_state)
+    return;
+
+  int index = GPOINTER_TO_INT(data);
+
+  // If already matched, ignore
+  if (g_pm_state->matchedWords[index])
+    return;
+
+  // Deselect previous selection
+  if (g_pm_state->selectedWordIndex >= 0) {
+    GtkWidget *prevBtn = g_pm_state->wordButtons[g_pm_state->selectedWordIndex];
+    GtkStyleContext *prevCtx = gtk_widget_get_style_context(prevBtn);
+    gtk_style_context_remove_class(prevCtx, "selected");
+  }
+
+  // Select this word
+  g_pm_state->selectedWordIndex = index;
+  GtkStyleContext *ctx = gtk_widget_get_style_context(widget);
+  gtk_style_context_add_class(ctx, "selected");
+
+  // Check if we have both selections for a match
+  if (g_pm_state->selectedImageIndex >= 0) {
+    int imgIdx = g_pm_state->selectedImageIndex;
+    int wordIdx = g_pm_state->selectedWordIndex;
+
+    // Record the match
+    g_pm_state->matches.push_back({imgIdx, wordIdx});
+    g_pm_state->matchedImages[imgIdx] = true;
+    g_pm_state->matchedWords[wordIdx] = true;
+
+    // Update button styles
+    GtkWidget *imgBtn = g_pm_state->imageButtons[imgIdx];
+    GtkWidget *wordBtn = g_pm_state->wordButtons[wordIdx];
+
+    GtkStyleContext *imgCtx = gtk_widget_get_style_context(imgBtn);
+    GtkStyleContext *wordCtx = gtk_widget_get_style_context(wordBtn);
+
+    gtk_style_context_remove_class(imgCtx, "selected");
+    gtk_style_context_remove_class(wordCtx, "selected");
+    gtk_style_context_add_class(imgCtx, "matched");
+    gtk_style_context_add_class(wordCtx, "matched");
+
+    // Make buttons insensitive
+    gtk_widget_set_sensitive(imgBtn, FALSE);
+    gtk_widget_set_sensitive(wordBtn, FALSE);
+
+    // Reset selections
+    g_pm_state->selectedImageIndex = -1;
+    g_pm_state->selectedWordIndex = -1;
+
+    g_print("[MATCH] Image %d matched with Word %d\n", imgIdx, wordIdx);
+  }
+}
+
+// Apply CSS styling for picture match game
+static void apply_pm_css() {
+  GtkCssProvider *provider = gtk_css_provider_new();
+  const char *css =
+      ".pm-image-btn { "
+      "  padding: 8px; "
+      "  border-radius: 12px; "
+      "  background: #f8f9fa; "
+      "  border: 3px solid #dee2e6; "
+      "  transition: all 0.2s ease; "
+      "} "
+      ".pm-image-btn:hover { "
+      "  border-color: #6c757d; "
+      "  background: #e9ecef; "
+      "} "
+      ".pm-word-btn { "
+      "  padding: 12px 20px; "
+      "  font-size: 16px; "
+      "  font-weight: bold; "
+      "  border-radius: 8px; "
+      "  background: #e3f2fd; "
+      "  border: 2px solid #90caf9; "
+      "  color: #1565c0; "
+      "} "
+      ".pm-word-btn:hover { "
+      "  background: #bbdefb; "
+      "  border-color: #42a5f5; "
+      "} "
+      ".selected { "
+      "  border-color: #ff9800 !important; "
+      "  border-width: 4px !important; "
+      "  background: #fff3e0 !important; "
+      "  box-shadow: 0 0 10px rgba(255, 152, 0, 0.5); "
+      "} "
+      ".matched { "
+      "  border-color: #4caf50 !important; "
+      "  background: #e8f5e9 !important; "
+      "  opacity: 0.7; "
+      "} ";
+
+  gtk_css_provider_load_from_data(provider, css, -1, nullptr);
+  gtk_style_context_add_provider_for_screen(
+      gdk_screen_get_default(), GTK_STYLE_PROVIDER(provider),
+      GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(provider);
+}
+
+// Show picture match game dialog with visual image tiles
+static void show_picture_match_game(
+    const std::string &gameTitle,
+    const std::string &gameSessionId,
+    const std::string &gameId,
+    const std::string &timeLimit,
+    const std::vector<std::pair<std::string, std::string>> &pairs) {
+
+  // Apply CSS styles
+  apply_pm_css();
+
+  // Initialize game state
+  g_pm_state = new PictureMatchState();
+  g_pm_state->pairs = pairs;
+  g_pm_state->gameSessionId = gameSessionId;
+  g_pm_state->gameId = gameId;
+  g_pm_state->selectedImageIndex = -1;
+  g_pm_state->selectedWordIndex = -1;
+  g_pm_state->matchedImages.resize(pairs.size(), false);
+  g_pm_state->matchedWords.resize(pairs.size(), false);
+  g_pm_state->correctMatches = 0;
+  g_pm_state->totalPairs = pairs.size();
+
+  // Create dialog
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(
+      gameTitle.c_str(), GTK_WINDOW(window), GTK_DIALOG_MODAL,
+      "Hủy", GTK_RESPONSE_CLOSE,
+      "Nộp bài", GTK_RESPONSE_OK,
+      NULL);
+  gtk_window_set_default_size(GTK_WINDOW(dialog), 800, 600);
+  g_pm_state->dialog = dialog;
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  gtk_container_set_border_width(GTK_CONTAINER(content), 16);
+
+  // Header with instructions
+  GtkWidget *headerBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  gtk_box_pack_start(GTK_BOX(content), headerBox, FALSE, FALSE, 0);
+
+  GtkWidget *titleLabel = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(titleLabel),
+                       "<span size='large' weight='bold'>🎮 PICTURE MATCHING GAME</span>");
+  gtk_box_pack_start(GTK_BOX(headerBox), titleLabel, FALSE, FALSE, 0);
+
+  std::string infoText = "Thời gian: " + timeLimit + "s | Ghép " +
+                         std::to_string(pairs.size()) + " cặp từ-hình";
+  GtkWidget *infoLabel = gtk_label_new(infoText.c_str());
+  gtk_box_pack_start(GTK_BOX(headerBox), infoLabel, FALSE, FALSE, 0);
+
+  GtkWidget *instructLabel = gtk_label_new(
+      "Click vào hình ảnh, sau đó click vào từ tương ứng để ghép cặp");
+  gtk_widget_set_margin_bottom(instructLabel, 16);
+  gtk_box_pack_start(GTK_BOX(headerBox), instructLabel, FALSE, FALSE, 0);
+
+  // Main game area with grid
+  GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
+                                 GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_widget_set_vexpand(scrolled, TRUE);
+  gtk_box_pack_start(GTK_BOX(content), scrolled, TRUE, TRUE, 0);
+
+  // Create main horizontal box for two columns
+  GtkWidget *mainBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 32);
+  gtk_container_set_border_width(GTK_CONTAINER(mainBox), 16);
+  gtk_container_add(GTK_CONTAINER(scrolled), mainBox);
+
+  // Left column: Images grid
+  GtkWidget *imgFrame = gtk_frame_new("Hình ảnh");
+  gtk_widget_set_hexpand(imgFrame, TRUE);
+  gtk_box_pack_start(GTK_BOX(mainBox), imgFrame, TRUE, TRUE, 0);
+
+  GtkWidget *imgGrid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(imgGrid), 12);
+  gtk_grid_set_column_spacing(GTK_GRID(imgGrid), 12);
+  gtk_container_set_border_width(GTK_CONTAINER(imgGrid), 12);
+  gtk_container_add(GTK_CONTAINER(imgFrame), imgGrid);
+
+  // Right column: Words
+  GtkWidget *wordFrame = gtk_frame_new("Từ vựng");
+  gtk_widget_set_hexpand(wordFrame, TRUE);
+  gtk_box_pack_start(GTK_BOX(mainBox), wordFrame, TRUE, TRUE, 0);
+
+  GtkWidget *wordBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  gtk_container_set_border_width(GTK_CONTAINER(wordBox), 12);
+  gtk_container_add(GTK_CONTAINER(wordFrame), wordBox);
+
+  // Shuffle indices for words (to make game challenging)
+  std::vector<int> wordOrder;
+  for (size_t i = 0; i < pairs.size(); i++)
+    wordOrder.push_back(i);
+  for (size_t i = wordOrder.size() - 1; i > 0; i--) {
+    size_t j = rand() % (i + 1);
+    std::swap(wordOrder[i], wordOrder[j]);
+  }
+
+  // Create image buttons (3 per row)
+  int cols = 3;
+  for (size_t i = 0; i < pairs.size(); i++) {
+    const std::string &imageSource = pairs[i].second;
+
+    // Load or create image
+    GdkPixbuf *pixbuf = load_game_image(imageSource, 100, 100);
+
+    // Create image widget
+    GtkWidget *image = gtk_image_new_from_pixbuf(pixbuf);
+    g_object_unref(pixbuf);
+
+    // Create button containing the image
+    GtkWidget *btn = gtk_button_new();
+    gtk_container_add(GTK_CONTAINER(btn), image);
+
+    GtkStyleContext *ctx = gtk_widget_get_style_context(btn);
+    gtk_style_context_add_class(ctx, "pm-image-btn");
+
+    // Connect click handler
+    g_signal_connect(btn, "clicked", G_CALLBACK(on_pm_image_clicked),
+                     GINT_TO_POINTER(i));
+
+    // Add to grid
+    int row = i / cols;
+    int col = i % cols;
+    gtk_grid_attach(GTK_GRID(imgGrid), btn, col, row, 1, 1);
+
+    g_pm_state->imageButtons.push_back(btn);
+  }
+
+  // Create word buttons (in shuffled order)
+  for (size_t i = 0; i < wordOrder.size(); i++) {
+    int origIdx = wordOrder[i];
+    const std::string &word = pairs[origIdx].first;
+
+    GtkWidget *btn = gtk_button_new_with_label(word.c_str());
+
+    GtkStyleContext *ctx = gtk_widget_get_style_context(btn);
+    gtk_style_context_add_class(ctx, "pm-word-btn");
+
+    // Store original index in button data
+    g_object_set_data(G_OBJECT(btn), "orig_index", GINT_TO_POINTER(origIdx));
+
+    // Connect click handler with original index
+    g_signal_connect(btn, "clicked", G_CALLBACK(on_pm_word_clicked),
+                     GINT_TO_POINTER(origIdx));
+
+    gtk_box_pack_start(GTK_BOX(wordBox), btn, FALSE, FALSE, 4);
+
+    // Store at original index position for consistent access
+    if (g_pm_state->wordButtons.size() <= (size_t)origIdx)
+      g_pm_state->wordButtons.resize(origIdx + 1, nullptr);
+    g_pm_state->wordButtons[origIdx] = btn;
+  }
+
+  gtk_widget_show_all(dialog);
+
+  // Run dialog
+  int response = gtk_dialog_run(GTK_DIALOG(dialog));
+
+  // Build matches JSON for submission
+  std::stringstream matchesJson;
+  matchesJson << "[";
+  bool first = true;
+  for (const auto &match : g_pm_state->matches) {
+    int imgIdx = match.first;
+    int wordIdx = match.second;
+    if (!first)
+      matchesJson << ",";
+    first = false;
+    matchesJson << "{\"word\":\"" << escape_json(pairs[imgIdx].first) << "\","
+                << "\"imageUrl\":\"" << escape_json(pairs[imgIdx].second) << "\"}";
+  }
+  matchesJson << "]";
+
+  gtk_widget_destroy(dialog);
+
+  if (response != GTK_RESPONSE_OK) {
+    delete g_pm_state;
+    g_pm_state = nullptr;
+    return;
+  }
+
+  // Submit game result
+  std::string submitReq = "{\"messageType\":\"SUBMIT_GAME_RESULT_REQUEST\","
+                          " \"sessionToken\":\"" +
+                          sessionToken +
+                          "\", \"payload\":{\"gameSessionId\":\"" +
+                          gameSessionId + "\",\"gameId\":\"" + gameId +
+                          "\",\"matches\":" + matchesJson.str() + "}}";
+  if (!sendMessage(submitReq)) {
+    delete g_pm_state;
+    g_pm_state = nullptr;
+    return;
+  }
+
+  std::string submitResp = waitForResponse(4000);
+
+  // Parse result
+  std::string score = "?", maxScore = "?", grade = "?", percentage = "?";
+  auto pickVal = [&](const std::string &key) {
+    std::regex r("\\\"" + key + "\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
+    std::smatch m;
+    if (std::regex_search(submitResp, m, r) && m.size() > 1)
+      return m.str(1);
+    return std::string("?");
+  };
+  score = pickVal("score");
+  maxScore = pickVal("maxScore");
+  grade = pickVal("grade");
+  percentage = pickVal("percentage");
+
+  std::string resultMsg = "🎮 KẾT QUẢ GAME\n\nĐiểm: " + score + "/" + maxScore +
+                          " (" + percentage + "%)\nXếp loại: " + grade +
+                          "\n\nSố cặp đã ghép: " +
+                          std::to_string(g_pm_state->matches.size()) + "/" +
+                          std::to_string(g_pm_state->totalPairs);
+
+  GtkWidget *resultDialog = gtk_message_dialog_new(
+      GTK_WINDOW(window), GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
+      "%s", resultMsg.c_str());
+  gtk_dialog_run(GTK_DIALOG(resultDialog));
+  gtk_widget_destroy(resultDialog);
+
+  delete g_pm_state;
+  g_pm_state = nullptr;
+}
+
+// =========================================================
 // 2. CÁC HÀM TIỆN ÍCH (HELPER)
 // =========================================================
 
@@ -1346,7 +1903,14 @@ void show_game_dialog() {
   std::string timeLimit = val("timeLimit");
   std::string gameData = startResp; // reuse whole payload for pair parsing
 
-  // 4) Giao diện chơi game
+  // Special handling for picture_match: use visual image dialog
+  if (gameType == "picture_match") {
+    auto pairs = parse_pairs(gameData, "word", "imageUrl");
+    show_picture_match_game(gameTitle, gameSessionId, gameId, timeLimit, pairs);
+    return;
+  }
+
+  // 4) Giao diện chơi game (for word_match and sentence_match)
   GtkWidget *play = gtk_dialog_new_with_buttons(
       gameTitle.c_str(), GTK_WINDOW(window), GTK_DIALOG_MODAL, "Hủy",
       GTK_RESPONSE_CLOSE, "Nộp", GTK_RESPONSE_OK, NULL);
@@ -1389,14 +1953,8 @@ void show_game_dialog() {
     display << "\nCâu trả lời:\n";
     for (size_t i = 0; i < pairs.size(); ++i)
       display << "  " << (i + 1) << ") " << pairs[i].second << "\n";
-  } else if (gameType == "picture_match") {
-    pairs = parse_pairs(gameData, "word", "imageUrl");
-    display << "Ghép từ với hình ảnh (URL minh họa):\n\n";
-    for (size_t i = 0; i < pairs.size(); ++i) {
-      display << (i + 1) << ". " << pairs[i].first << " -> " << pairs[i].second
-              << "\n";
-    }
   } else {
+    // picture_match is handled separately with visual image dialog
     display << "Loại game chưa hỗ trợ.";
   }
 
@@ -1429,10 +1987,9 @@ void show_game_dialog() {
       if (!first)
         matchesJson << ",";
       first = false;
-      matchesJson << "{\"" << (gameType == "picture_match" ? "word" : "left")
-                  << "\":\"" << escape_json(pairs[li].first) << "\",\""
-                  << (gameType == "picture_match" ? "imageUrl" : "right")
-                  << "\":\"" << escape_json(pairs[ri].second) << "\"}";
+      // word_match and sentence_match use "left"/"right" keys
+      matchesJson << "{\"left\":\"" << escape_json(pairs[li].first) << "\","
+                  << "\"right\":\"" << escape_json(pairs[ri].second) << "\"}";
     }
   }
   matchesJson << "]";

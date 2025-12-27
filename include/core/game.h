@@ -11,6 +11,37 @@ namespace english_learning {
 namespace core {
 
 /**
+ * Image source type for picture matching games
+ */
+enum class ImageSourceType {
+    LocalFile,      // Image stored as local file path
+    RemoteUrl,      // Image URL (requires download)
+    Embedded        // Base64 encoded or resource embedded
+};
+
+/**
+ * Picture pair with word and image information
+ */
+struct PicturePair {
+    std::string word;           // The word to match
+    std::string imageSource;    // File path, URL, or embedded data
+    ImageSourceType sourceType; // Type of image source
+
+    PicturePair() : sourceType(ImageSourceType::LocalFile) {}
+    PicturePair(const std::string& w, const std::string& src,
+                ImageSourceType type = ImageSourceType::LocalFile)
+        : word(w), imageSource(src), sourceType(type) {}
+
+    // For backward compatibility with pair<string,string>
+    PicturePair(const std::pair<std::string, std::string>& p)
+        : word(p.first), imageSource(p.second), sourceType(ImageSourceType::RemoteUrl) {}
+
+    // Check if image is local file
+    bool isLocalFile() const { return sourceType == ImageSourceType::LocalFile; }
+    bool isRemoteUrl() const { return sourceType == ImageSourceType::RemoteUrl; }
+};
+
+/**
  * Game entity representing a learning game.
  * Games include word matching, sentence matching, and picture matching.
  */
@@ -23,7 +54,8 @@ struct Game {
     std::string topic;
     std::vector<std::pair<std::string, std::string>> pairs;         // For word_match: (word, meaning)
     std::vector<std::pair<std::string, std::string>> sentencePairs; // For sentence_match
-    std::vector<std::pair<std::string, std::string>> picturePairs;  // For picture_match: (word, imageUrl)
+    std::vector<std::pair<std::string, std::string>> picturePairs;  // For picture_match: (word, imageUrl) - legacy
+    std::vector<PicturePair> pictureItems;                          // For picture_match: enhanced with source type
     int timeLimit;              // Time limit in seconds
     int maxScore;
 

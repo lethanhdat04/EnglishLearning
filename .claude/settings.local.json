@@ -11,7 +11,9 @@
       "Bash(git -C /mnt/d/EnglishLearning show --name-status 186f386)",
       "Bash(mkdir:*)",
       "Bash(timeout 2 ./server:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(xargs cat:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

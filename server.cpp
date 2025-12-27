@@ -1241,25 +1241,46 @@ Instead of "important" -> crucial, vital, significant
     game3.maxScore = 100;
     games[game3.gameId] = game3;
 
-    // Game 4: Picture Matching (using text descriptions as placeholder)
+    // Game 4: Picture Matching (Fruits - beginner level)
+    // Image format: "placeholder:color:emoji" for GUI to render colored placeholders
     Game game4;
     game4.gameId = "game_004";
     game4.gameType = "picture_match";
-    game4.title = "Picture-Word Matching";
-    game4.description = "Match words with pictures";
+    game4.title = "Fruit Pictures";
+    game4.description = "Match English words with fruit images";
     game4.level = "beginner";
     game4.topic = "vocabulary";
     game4.picturePairs = {
-        {"Apple", "https://example.com/images/apple.jpg"},
-        {"Cat", "https://example.com/images/cat.jpg"},
-        {"Book", "https://example.com/images/book.jpg"},
-        {"Car", "https://example.com/images/car.jpg"},
-        {"House", "https://example.com/images/house.jpg"},
-        {"Tree", "https://example.com/images/tree.jpg"}
+        {"Apple", "placeholder:#FF6B6B:🍎"},
+        {"Banana", "placeholder:#FFE66D:🍌"},
+        {"Orange", "placeholder:#FFA94D:🍊"},
+        {"Grapes", "placeholder:#9B59B6:🍇"},
+        {"Watermelon", "placeholder:#2ECC71:🍉"},
+        {"Strawberry", "placeholder:#E74C3C:🍓"}
     };
-    game4.timeLimit = 150;
+    game4.timeLimit = 120;
     game4.maxScore = 100;
     games[game4.gameId] = game4;
+
+    // Game 5: Picture Matching (Animals - intermediate level)
+    Game game5;
+    game5.gameId = "game_005";
+    game5.gameType = "picture_match";
+    game5.title = "Animal Pictures";
+    game5.description = "Match English words with animal images";
+    game5.level = "intermediate";
+    game5.topic = "vocabulary";
+    game5.picturePairs = {
+        {"Cat", "placeholder:#FFB347:🐱"},
+        {"Dog", "placeholder:#8B4513:🐕"},
+        {"Bird", "placeholder:#87CEEB:🐦"},
+        {"Fish", "placeholder:#4169E1:🐟"},
+        {"Elephant", "placeholder:#808080:🐘"},
+        {"Lion", "placeholder:#DAA520:🦁"}
+    };
+    game5.timeLimit = 100;
+    game5.maxScore = 100;
+    games[game5.gameId] = game5;
 
     std::cout << "[INFO] Sample data initialized: "
               << users.size() << " users, "

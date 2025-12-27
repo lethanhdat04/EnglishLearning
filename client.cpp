@@ -1757,19 +1757,41 @@ void playGames() {
             printColored("Grade: " + grade + "\n", (grade == "A" || grade == "B") ? "green" : "yellow");
         }
     } else if (gameType == "picture_match") {
-        printColored("Match words with pictures:\n\n", "yellow");
-        printColored("(Note: In a real app, images would be displayed here)\n\n", "magenta");
-        
-        std::vector<std::string> words, imageUrls;
+        printColored("╔══════════════════════════════════════════════════════╗\n", "magenta");
+        printColored("║           PICTURE MATCHING GAME                      ║\n", "magenta");
+        printColored("╠══════════════════════════════════════════════════════╣\n", "magenta");
+        printColored("║ Match each word with its corresponding picture.      ║\n", "magenta");
+        printColored("╚══════════════════════════════════════════════════════╝\n\n", "magenta");
+
+        std::vector<std::string> words, imageUrls, emojis;
         for (const std::string& pair : pairs) {
             words.push_back(getJsonValue(pair, "word"));
-            imageUrls.push_back(getJsonValue(pair, "imageUrl"));
+            std::string imgUrl = getJsonValue(pair, "imageUrl");
+            imageUrls.push_back(imgUrl);
+
+            // Extract emoji from placeholder format: "placeholder:color:emoji"
+            std::string emoji = "🖼️";
+            if (imgUrl.find("placeholder:") == 0) {
+                size_t lastColon = imgUrl.rfind(':');
+                if (lastColon != std::string::npos && lastColon > 12) {
+                    emoji = imgUrl.substr(lastColon + 1);
+                }
+            }
+            emojis.push_back(emoji);
         }
 
-        printColored("Words:\n", "magenta");
+        // Display words column
+        printColored("┌─────────────────────────┬─────────────────────────┐\n", "cyan");
+        printColored("│        WORDS            │        PICTURES         │\n", "cyan");
+        printColored("├─────────────────────────┼─────────────────────────┤\n", "cyan");
+
         for (size_t i = 0; i < words.size(); i++) {
-            printColored("  " + std::to_string(i + 1) + ". " + words[i] + " (Image: " + imageUrls[i] + ")\n", "");
+            char buffer[128];
+            snprintf(buffer, sizeof(buffer), "│ %zu. %-20s │ %zu. %-20s │\n",
+                     i + 1, words[i].c_str(), i + 1, emojis[i].c_str());
+            printColored(buffer, "");
         }
+        printColored("└─────────────────────────┴─────────────────────────┘\n\n", "cyan");
 
         printColored("\nEnter matches (format: word1-img1,word2-img2,...): ", "green");
         std::string matchesInput;
