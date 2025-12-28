@@ -25,8 +25,9 @@ This document describes the layered architecture implemented through a 6-phase r
 │  │  ├── LessonService: Lesson CRUD, filtering                              ││
 │  │  ├── TestService: Test management, submissions                          ││
 │  │  ├── ChatService: Messaging, online users                               ││
-│  │  ├── ExerciseService: Exercises, teacher review                         ││
-│  │  └── GameService: Games, sessions, leaderboards                         ││
+│  │  ├── ExerciseService: Exercises, teacher review, feedback viewer        ││
+│  │  ├── GameService: Games, sessions, picture matching                     ││
+│  │  └── VoiceCallService: Voice calls (initiate, accept, reject, end)      ││
 │  └─────────────────────────────────────────────────────────────────────────┘│
 └───────────────────────────────────┬─────────────────────────────────────────┘
                                     │ depends on
@@ -38,10 +39,11 @@ This document describes the layered architecture implemented through a 6-phase r
 │  │  ├── IUserRepository          │ │  ├── BridgeUserRepository (globals)   ││
 │  │  ├── ISessionRepository       │ │  ├── BridgeSessionRepository          ││
 │  │  ├── ILessonRepository        │ │  ├── BridgeLessonRepository           ││
-│  │  ├── ITestRepository          │ │  ├── MemoryUserRepository (standalone)││
-│  │  ├── IChatRepository          │ │  └── ... more implementations         ││
-│  │  ├── IExerciseRepository      │ │                                       ││
-│  │  └── IGameRepository          │ │                                       ││
+│  │  ├── ITestRepository          │ │  ├── BridgeVoiceCallRepository        ││
+│  │  ├── IChatRepository          │ │  ├── MemoryUserRepository (standalone)││
+│  │  ├── IExerciseRepository      │ │  └── ... more implementations         ││
+│  │  ├── IGameRepository          │ │                                       ││
+│  │  └── IVoiceCallRepository     │ │                                       ││
 │  └───────────────────────────────┘ └───────────────────────────────────────┘│
 └───────────────────────────────────┬─────────────────────────────────────────┘
                                     │ uses
@@ -66,8 +68,9 @@ This document describes the layered architecture implemented through a 6-phase r
 │  │  ├── Lesson: lessonId, title, content, level, topic                     ││
 │  │  ├── Test/TestQuestion: testId, questions, answers                      ││
 │  │  ├── ChatMessage: messageId, senderId, recipientId, content             ││
-│  │  ├── Exercise/ExerciseSubmission: exercises with teacher review         ││
-│  │  └── Game/GameSession: matching games with pairs                        ││
+│  │  ├── Exercise/ExerciseSubmission: exercises with teacher feedback       ││
+│  │  ├── Game/GameSession: matching games with picture support              ││
+│  │  └── VoiceCall: callId, callerId, calleeId, status, timestamps          ││
 │  └─────────────────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -89,7 +92,8 @@ This document describes the layered architecture implemented through a 6-phase r
 | `include/core/test.h` | Test and TestQuestion structs |
 | `include/core/chat_message.h` | ChatMessage struct |
 | `include/core/exercise.h` | Exercise and ExerciseSubmission structs |
-| `include/core/game.h` | Game and GameSession structs |
+| `include/core/game.h` | Game and GameSession structs with PicturePair |
+| `include/core/voice_call.h` | VoiceCall struct with status tracking |
 | `include/core/all.h` | Convenience header including all models |
 
 ### Key Design Decisions
@@ -174,6 +178,7 @@ namespace english_learning::protocol::MessageType {
 | `include/repository/i_chat_repository.h` | Chat message data access interface |
 | `include/repository/i_exercise_repository.h` | Exercise data access interface |
 | `include/repository/i_game_repository.h` | Game data access interface |
+| `include/repository/i_voice_call_repository.h` | Voice call data access interface |
 | `include/repository/all.h` | Convenience header |
 | `src/repository/memory/*.cpp` | In-memory implementations |
 
@@ -217,8 +222,10 @@ public:
 | `include/service/i_chat_service.h` | Chat service interface |
 | `include/service/i_exercise_service.h` | Exercise service interface |
 | `include/service/i_game_service.h` | Game service interface |
+| `include/service/i_voice_call_service.h` | Voice call service interface |
 | `include/service/all.h` | Convenience header |
 | `src/service/*.cpp` | Service implementations |
+| `src/service/voice_call_service.cpp` | Voice call service implementation |
 | `src/service/service_container.h` | Dependency injection container |
 
 ### ServiceResult Pattern
@@ -269,7 +276,7 @@ public:
 | File | Description |
 |------|-------------|
 | `src/repository/bridge/bridge_repositories.h` | User, Session, Chat bridges |
-| `src/repository/bridge/bridge_repositories_ext.h` | Lesson, Test, Exercise, Game bridges |
+| `src/repository/bridge/bridge_repositories_ext.h` | Lesson, Test, Exercise, Game, VoiceCall bridges |
 
 ### Bridge Pattern
 
@@ -299,10 +306,11 @@ public:
 // In main():
 static bridge::BridgeUserRepository userRepo(users, userById, usersMutex);
 static bridge::BridgeSessionRepository sessionRepo(sessions, clientSessions, sessionsMutex);
+static bridge::BridgeVoiceCallRepository voiceCallRepo(voiceCalls, voiceCallsMutex);
 // ... more bridge repos
 
 serviceContainer = std::make_unique<service::ServiceContainer>(
-    userRepo, sessionRepo, lessonRepo, testRepo, chatRepo, exerciseRepo, gameRepo);
+    userRepo, sessionRepo, lessonRepo, testRepo, chatRepo, exerciseRepo, gameRepo, voiceCallRepo);
 ```
 
 ---
@@ -355,7 +363,8 @@ EnglishLearning/
 │   │   ├── test.h
 │   │   ├── chat_message.h
 │   │   ├── exercise.h
-│   │   ├── game.h
+│   │   ├── game.h              # Includes PicturePair, ImageSourceType
+│   │   ├── voice_call.h
 │   │   └── all.h
 │   ├── protocol/                # Phase 2: Protocol layer
 │   │   ├── message_types.h
@@ -371,6 +380,7 @@ EnglishLearning/
 │   │   ├── i_chat_repository.h
 │   │   ├── i_exercise_repository.h
 │   │   ├── i_game_repository.h
+│   │   ├── i_voice_call_repository.h
 │   │   └── all.h
 │   └── service/                 # Phase 4: Service interfaces
 │       ├── service_result.h
@@ -380,6 +390,7 @@ EnglishLearning/
 │       ├── i_chat_service.h
 │       ├── i_exercise_service.h
 │       ├── i_game_service.h
+│       ├── i_voice_call_service.h
 │       └── all.h
 ├── src/
 │   ├── protocol/                # Phase 2: Implementations
@@ -405,6 +416,8 @@ EnglishLearning/
 │       ├── exercise_service.cpp
 │       ├── game_service.h
 │       ├── game_service.cpp
+│       ├── voice_call_service.h
+│       ├── voice_call_service.cpp
 │       ├── service_container.h
 │       └── all.h
 ├── doc/

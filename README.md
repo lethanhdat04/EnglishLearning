@@ -44,8 +44,13 @@ A client-server application for learning English, built with modern C++17. The s
 - **Lessons**: Browse and study lessons filtered by level and topic
 - **Tests**: Multiple question types (multiple choice, fill-in-blank, sentence ordering)
 - **Exercises**: Writing practice with teacher feedback workflow
-- **Games**: Word matching, sentence matching, and picture matching games
+- **Teacher Feedback Viewer**: Students can view detailed feedback on submitted exercises
+- **Games**: Interactive matching games
+  - Word matching (English-Vietnamese vocabulary pairs)
+  - Sentence matching (question-answer pairs)
+  - Picture matching with visual image tiles (GtkImage with Cairo rendering)
 - **Chat**: Real-time messaging between students and teachers
+- **Voice Call**: Initiate, accept, reject, and end voice calls between users
 - **Levels**: Beginner, Intermediate, and Advanced difficulty tiers
 - **Topics**: Grammar, Vocabulary, Listening, Speaking, Reading, Writing
 
@@ -81,10 +86,10 @@ The application follows a layered clean architecture pattern, separating concern
           |
 +---------v---------------------------------------------------------+
 |                        SERVICE LAYER                               |
-|  +--------+ +--------+ +--------+ +--------+ +--------+ +------+  |
-|  |  Auth  | | Lesson | |  Test  | |Exercise| |  Game  | | Chat |  |
-|  |Service | |Service | |Service | |Service | |Service | |Serv. |  |
-|  +--------+ +--------+ +--------+ +--------+ +--------+ +------+  |
+|  +------+ +------+ +------+ +--------+ +------+ +------+ +------+ |
+|  | Auth | |Lesson| | Test | |Exercise| | Game | | Chat | |Voice | |
+|  | Svc  | | Svc  | | Svc  | |  Svc   | | Svc  | | Svc  | | Call | |
+|  +------+ +------+ +------+ +--------+ +------+ +------+ +------+ |
 +-------------------------------------------------------------------+
           |
 +---------v---------------------------------------------------------+
@@ -100,9 +105,10 @@ The application follows a layered clean architecture pattern, separating concern
           |
 +---------v---------------------------------------------------------+
 |                         CORE LAYER                                 |
-|  +------+ +--------+ +------+ +--------+ +------+ +------------+  |
-|  | User | | Lesson | | Test | |Exercise| | Game | |  Session   |  |
-|  +------+ +--------+ +------+ +--------+ +------+ +------------+  |
+|  +------+ +------+ +------+ +--------+ +------+ +-------+ +-----+ |
+|  | User | |Lesson| | Test | |Exercise| | Game | |Session| |Voice| |
+|  +------+ +------+ +------+ +--------+ +------+ +-------+ |Call | |
+|  +--------------------------------------------------------+-----+ |
 +-------------------------------------------------------------------+
 ```
 
@@ -136,8 +142,9 @@ EnglishLearning/
 |   |   |-- lesson.h            # Lesson entity
 |   |   |-- test.h              # Test and TestQuestion entities
 |   |   |-- exercise.h          # Exercise and Submission entities
-|   |   |-- game.h              # Game and GameSession entities
-|   |   +-- chat_message.h      # ChatMessage entity
+|   |   |-- game.h              # Game, GameSession, PicturePair entities
+|   |   |-- chat_message.h      # ChatMessage entity
+|   |   +-- voice_call.h        # VoiceCall entity
 |   |
 |   |-- protocol/               # Protocol definitions
 |   |   |-- all.h               # Aggregate include
@@ -154,7 +161,8 @@ EnglishLearning/
 |   |   |-- i_test_repository.h
 |   |   |-- i_exercise_repository.h
 |   |   |-- i_game_repository.h
-|   |   +-- i_chat_repository.h
+|   |   |-- i_chat_repository.h
+|   |   +-- i_voice_call_repository.h
 |   |
 |   +-- service/                # Service interfaces
 |       |-- all.h               # Aggregate include
@@ -164,7 +172,8 @@ EnglishLearning/
 |       |-- i_test_service.h
 |       |-- i_exercise_service.h
 |       |-- i_game_service.h
-|       +-- i_chat_service.h
+|       |-- i_chat_service.h
+|       +-- i_voice_call_service.h
 |
 |-- src/                        # Implementation files
 |   |-- protocol/
@@ -191,7 +200,8 @@ EnglishLearning/
 |       |-- test_service.h / .cpp
 |       |-- exercise_service.h / .cpp
 |       |-- game_service.h / .cpp
-|       +-- chat_service.h / .cpp
+|       |-- chat_service.h / .cpp
+|       +-- voice_call_service.h / .cpp
 |
 +-- doc/                        # Documentation
     |-- ARCHITECTURE.md         # Detailed architecture documentation
@@ -313,9 +323,11 @@ The server initializes with sample data for testing:
 |  2. View All Lessons                     |
 |  3. Take a Test                          |
 |  4. Do Exercises                         |
-|  5. Play Games                           |
-|  6. Chat with Others                     |
-|  7. Logout                               |
+|  5. View Teacher Feedback                |
+|  6. Play Games                           |
+|  7. Chat with Others                     |
+|  8. Voice Call                           |
+|  9. Logout                               |
 |  0. Exit                                 |
 +==========================================+
 ```
@@ -436,6 +448,9 @@ english_learning::service::     // Business logic
 - [ ] Spaced repetition for vocabulary
 - [ ] Teacher dashboard for student management
 - [ ] Push notifications for mobile clients
+- [x] Voice call between users
+- [x] Teacher feedback viewer for students
+- [x] Picture matching with visual image tiles
 
 ---
 

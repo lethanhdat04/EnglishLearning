@@ -182,7 +182,8 @@ g++ -std=c++17 -Wall -Wextra -pthread -O2 -I. \
     src/service/test_service.cpp \
     src/service/chat_service.cpp \
     src/service/exercise_service.cpp \
-    src/service/game_service.cpp
+    src/service/game_service.cpp \
+    src/service/voice_call_service.cpp
 ```
 
 ---
@@ -215,7 +216,7 @@ make run-server
 ╚══════════════════════════════════════════╝
 [INFO] Starting server on port 8888...
 [INFO] Server is running. Waiting for connections...
-[INFO] Initialized 3 users, 6 lessons, 3 tests, 3 exercises, 3 games
+[INFO] Initialized 6 users, 7 lessons, 3 tests, 4 exercises, 5 games
 ```
 
 ### 3.2 Start Console Client
@@ -307,8 +308,10 @@ The server initializes with sample data:
 | Email | Password | Role | Level |
 |-------|----------|------|-------|
 | `student@example.com` | `student123` | Student | Beginner |
+| `student2@example.com` | `student123` | Student | Intermediate |
 | `sarah@example.com` | `teacher123` | Teacher | Advanced |
 | `john@example.com` | `teacher123` | Teacher | Advanced |
+| `admin@example.com` | `admin123` | Admin | Advanced |
 
 ### 3.6 Running in Background
 
@@ -596,13 +599,17 @@ EnglishLearning/
 │   │   ├── user.h
 │   │   ├── lesson.h
 │   │   ├── test.h
+│   │   ├── game.h           # Includes PicturePair, ImageSourceType
+│   │   ├── voice_call.h
 │   │   └── ...
 │   ├── protocol/            # Protocol definitions
-│   │   ├── message_types.h
+│   │   ├── message_types.h  # 50+ message types
 │   │   ├── json_parser.h
 │   │   └── json_builder.h
 │   ├── repository/          # Repository interfaces
+│   │   └── i_voice_call_repository.h
 │   └── service/             # Service interfaces
+│       └── i_voice_call_service.h
 ├── src/
 │   ├── protocol/            # Protocol implementations
 │   ├── repository/          # Repository implementations

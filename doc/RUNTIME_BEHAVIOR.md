@@ -10,6 +10,8 @@ This document describes the runtime behavior of the English Learning Application
 2. [Login Flow](#2-login-flow)
 3. [Example Feature Flow: Fetch Lessons](#3-example-feature-flow-fetch-lessons)
 4. [Example Feature Flow: Send Chat Message](#4-example-feature-flow-send-chat-message)
+5. [Example Feature Flow: Voice Call](#5-example-feature-flow-voice-call)
+6. [Example Feature Flow: Picture Match Game](#6-example-feature-flow-picture-match-game)
 
 ---
 
@@ -64,8 +66,8 @@ The server initializes all layers and begins accepting client connections.
 #### Startup Output
 
 ```
-[INFO] Sample data initialized: 6 users, 7 lessons, 3 tests, 4 exercises, 4 games
-[INFO] Service layer initialized
+[INFO] Sample data initialized: 6 users, 7 lessons, 3 tests, 4 exercises, 5 games
+[INFO] Service layer initialized (8 services including VoiceCallService)
 ============================================
    ENGLISH LEARNING APP - SERVER
 ============================================
@@ -475,6 +477,93 @@ This flow demonstrates real-time message delivery with push notification.
   }
 }
 ```
+
+---
+
+## 5. Example Feature Flow: Voice Call
+
+This flow demonstrates real-time voice call signaling with push notifications.
+
+### Sequence Diagram
+
+```
+┌────────┐   ┌────────┐   ┌─────────────┐   ┌──────────┐   ┌───────────┐
+│ Caller │   │ Server │   │ VoiceCall   │   │  Callee  │   │  Callee   │
+│ Client │   │        │   │  Service    │   │   User   │   │  Client   │
+└───┬────┘   └───┬────┘   └──────┬──────┘   └─────┬────┘   └─────┬─────┘
+    │            │               │                │              │
+    │──(1)──────►│               │                │              │
+    │ VOICE_CALL_INITIATE        │                │              │
+    │            │               │                │              │
+    │            │──(2)─────────►│                │              │
+    │            │               │ createCall     │              │
+    │            │◄──────────────│                │              │
+    │            │               │                │              │
+    │            │──(3)──────────────────────────►│              │
+    │            │               │                │ lookup user  │
+    │            │               │                │              │
+    │            │──(4)────────────────────────────────────────►│
+    │            │               │                │ INCOMING_CALL│
+    │            │               │                │              │
+    │            │◄──(5)─────────│                │              │
+    │            │ INITIATE_RESPONSE              │              │
+    │◄───(6)─────│               │                │              │
+    │ success    │               │                │              │
+    └────────────┴───────────────┴────────────────┴──────────────┘
+```
+
+### Voice Call States
+
+| State | Description |
+|-------|-------------|
+| `ringing` | Call initiated, waiting for callee response |
+| `active` | Call accepted and in progress |
+| `ended` | Call ended normally |
+| `rejected` | Call rejected by callee |
+| `missed` | Call not answered (timeout) |
+
+---
+
+## 6. Example Feature Flow: Picture Match Game
+
+This flow demonstrates the visual picture matching game with GTK image rendering.
+
+### GUI Rendering Flow
+
+```
+┌───────────┐   ┌────────────┐   ┌──────────────┐   ┌────────────┐
+│   User    │   │  gui_main  │   │    Cairo     │   │  GtkImage  │
+│           │   │            │   │   Surface    │   │   Widget   │
+└─────┬─────┘   └─────┬──────┘   └──────┬───────┘   └──────┬─────┘
+      │               │                 │                  │
+      │──(1)─────────►│                 │                  │
+      │ Start Game    │                 │                  │
+      │               │                 │                  │
+      │               │──(2)───────────►│                  │
+      │               │  create_placeholder_pixbuf         │
+      │               │  (parse "placeholder:color:emoji") │
+      │               │                 │                  │
+      │               │◄────────────────│                  │
+      │               │  GdkPixbuf      │                  │
+      │               │                 │                  │
+      │               │──(3)───────────────────────────────►
+      │               │  gtk_image_new_from_pixbuf          │
+      │               │                 │                  │
+      │               │──(4) Add to GtkGrid                │
+      │               │                 │                  │
+      │◄──(5)─────────│                 │                  │
+      │ Display grid  │                 │                  │
+      │ with images   │                 │                  │
+      └───────────────┴─────────────────┴──────────────────┘
+```
+
+### Picture Source Types
+
+| Type | Format | Handling |
+|------|--------|----------|
+| `placeholder` | `placeholder:color:emoji` | Cairo-rendered colored tile |
+| `LocalFile` | File path | `gdk_pixbuf_new_from_file_at_scale()` |
+| `RemoteUrl` | HTTP(S) URL | Placeholder with globe icon |
 
 ---
 

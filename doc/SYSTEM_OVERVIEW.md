@@ -26,8 +26,13 @@ The English Learning App addresses these gaps by providing a comprehensive, inte
 - **Lesson Management**: Structured lessons organized by level (beginner/intermediate/advanced) and topic
 - **Testing System**: Multiple-choice tests with automatic grading
 - **Exercise Submission**: Writing exercises with teacher review workflow
+- **Teacher Feedback Viewer**: Students can view detailed feedback from teachers on submitted exercises
 - **Learning Games**: Interactive matching games for vocabulary practice
+  - Word matching (English-Vietnamese pairs)
+  - Sentence matching (question-answer pairs)
+  - Picture matching with visual image tiles (GTK image rendering with Cairo)
 - **Real-time Chat**: Direct messaging between students and teachers
+- **Voice Call**: Initiate, accept, reject, and end voice calls between users
 - **Progress Tracking**: Level-based content filtering and progression
 
 ---
@@ -74,8 +79,10 @@ The system follows a **layered architecture** with clear separation of concerns.
 
 **Key Components**:
 - `handleLogin()`, `handleGetLessons()`, `handleSendMessage()`, etc.
-- GTK+ GUI widgets and event handlers
-- Console menu system
+- `handleVoiceCallInitiate()`, `handleVoiceCallAccept()`, `handleVoiceCallReject()`, `handleVoiceCallEnd()`
+- `handleGetPendingReviews()`, `handleGetUserSubmissions()`, `handleGetFeedback()`
+- GTK+ GUI widgets and event handlers (including picture match with GtkImage)
+- Console menu system with voice call and feedback viewer options
 
 #### Protocol Layer
 **Location**: `include/protocol/`
@@ -88,7 +95,7 @@ The system follows a **layered architecture** with clear separation of concerns.
 | Utilities | ID generation, timestamps, session tokens |
 
 **Key Components**:
-- `MessageType` namespace with 40+ message constants
+- `MessageType` namespace with 50+ message constants (including voice call and feedback messages)
 - `JsonParser` for extracting values from JSON strings
 - `JsonBuilder` for constructing JSON responses
 - `utils` for cryptographic and time utilities
@@ -110,6 +117,7 @@ The system follows a **layered architecture** with clear separation of concerns.
 - `ChatService`: Messaging and online user tracking
 - `ExerciseService`: Exercise CRUD and teacher review workflow
 - `GameService`: Game sessions and leaderboards
+- `VoiceCallService`: Voice call initiation, acceptance, rejection, and status tracking
 - `ServiceContainer`: Dependency injection container
 
 #### Repository Layer
@@ -130,6 +138,7 @@ The system follows a **layered architecture** with clear separation of concerns.
 - `IChatRepository`: Chat message interface
 - `IExerciseRepository`: Exercise and submission interface
 - `IGameRepository`: Game and session interface
+- `IVoiceCallRepository`: Voice call management interface
 
 #### Data / Persistence Layer
 **Location**: `src/repository/bridge/`, `src/repository/memory/`
@@ -161,7 +170,8 @@ The system follows a **layered architecture** with clear separation of concerns.
 - `Test`, `TestQuestion`: Assessment content
 - `ChatMessage`: Messaging entity
 - `Exercise`, `ExerciseSubmission`: Practice content with review workflow
-- `Game`, `GameSession`: Interactive game content
+- `Game`, `GameSession`: Interactive game content with picture matching support
+- `VoiceCall`: Voice call entity with caller, callee, and status tracking
 
 ---
 

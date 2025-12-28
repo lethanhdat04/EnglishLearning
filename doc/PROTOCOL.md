@@ -1,7 +1,7 @@
 # English Learning Application Protocol Specification
 
-Version: 1.0
-Last Updated: 2025-12-27
+Version: 1.1
+Last Updated: 2025-12-28
 
 ## Table of Contents
 
@@ -14,7 +14,9 @@ Last Updated: 2025-12-27
    - [Exercises](#34-exercises)
    - [Games](#35-games)
    - [Chat](#36-chat)
-   - [Error Handling](#37-error-handling)
+   - [Voice Call](#37-voice-call)
+   - [Teacher Feedback](#38-teacher-feedback)
+   - [Error Handling](#39-error-handling)
 
 ---
 
@@ -1026,9 +1028,182 @@ Pushed to notify user of unread message count.
 
 ---
 
-### 3.7 Error Handling
+### 3.7 Voice Call
 
-#### 3.7.1 Error Response Format
+#### 3.7.1 Initiate Voice Call
+
+**Purpose**: Start a voice call with another user.
+
+**Request** (`VOICE_CALL_INITIATE_REQUEST`):
+```json
+{
+  "messageType": "VOICE_CALL_INITIATE_REQUEST",
+  "messageId": "msg_60_12400",
+  "sessionToken": "a1b2c3d4e5f6...64chars...",
+  "timestamp": 1703721600000,
+  "payload": {
+    "calleeId": "user_002"
+  }
+}
+```
+
+**Response** (`VOICE_CALL_INITIATE_RESPONSE`):
+```json
+{
+  "messageType": "VOICE_CALL_INITIATE_RESPONSE",
+  "messageId": "msg_60_12400",
+  "timestamp": 1703721600100,
+  "payload": {
+    "status": "success",
+    "data": {
+      "callId": "call_001",
+      "callerId": "user_001",
+      "calleeId": "user_002",
+      "status": "ringing",
+      "startTime": 1703721600100
+    }
+  }
+}
+```
+
+**Push to Callee** (`VOICE_CALL_INCOMING`):
+```json
+{
+  "messageType": "VOICE_CALL_INCOMING",
+  "timestamp": 1703721600100,
+  "payload": {
+    "callId": "call_001",
+    "callerId": "user_001",
+    "callerName": "John Doe"
+  }
+}
+```
+
+---
+
+#### 3.7.2 Accept Voice Call
+
+**Request** (`VOICE_CALL_ACCEPT_REQUEST`):
+```json
+{
+  "messageType": "VOICE_CALL_ACCEPT_REQUEST",
+  "sessionToken": "callee_token...",
+  "payload": {
+    "callId": "call_001"
+  }
+}
+```
+
+**Push to Caller** (`VOICE_CALL_ACCEPTED`):
+```json
+{
+  "messageType": "VOICE_CALL_ACCEPTED",
+  "payload": {
+    "callId": "call_001",
+    "acceptedAt": 1703721610000
+  }
+}
+```
+
+---
+
+#### 3.7.3 Reject Voice Call
+
+**Request** (`VOICE_CALL_REJECT_REQUEST`):
+```json
+{
+  "messageType": "VOICE_CALL_REJECT_REQUEST",
+  "sessionToken": "callee_token...",
+  "payload": {
+    "callId": "call_001"
+  }
+}
+```
+
+**Push to Caller** (`VOICE_CALL_REJECTED`):
+```json
+{
+  "messageType": "VOICE_CALL_REJECTED",
+  "payload": {
+    "callId": "call_001",
+    "rejectedAt": 1703721615000
+  }
+}
+```
+
+---
+
+#### 3.7.4 End Voice Call
+
+**Request** (`VOICE_CALL_END_REQUEST`):
+```json
+{
+  "messageType": "VOICE_CALL_END_REQUEST",
+  "sessionToken": "user_token...",
+  "payload": {
+    "callId": "call_001"
+  }
+}
+```
+
+**Push to Other Party** (`VOICE_CALL_ENDED`):
+```json
+{
+  "messageType": "VOICE_CALL_ENDED",
+  "payload": {
+    "callId": "call_001",
+    "endedAt": 1703721700000,
+    "duration": 90
+  }
+}
+```
+
+---
+
+### 3.8 Teacher Feedback
+
+#### 3.8.1 Get User Submissions
+
+**Purpose**: Retrieve all exercise submissions for a user to view teacher feedback.
+
+**Request** (`GET_USER_SUBMISSIONS_REQUEST`):
+```json
+{
+  "messageType": "GET_USER_SUBMISSIONS_REQUEST",
+  "sessionToken": "student_token...",
+  "payload": {}
+}
+```
+
+**Response** (`GET_USER_SUBMISSIONS_RESPONSE`):
+```json
+{
+  "messageType": "GET_USER_SUBMISSIONS_RESPONSE",
+  "payload": {
+    "status": "success",
+    "data": {
+      "submissions": [
+        {
+          "submissionId": "sub_001",
+          "exerciseId": "exercise_001",
+          "exerciseTitle": "Daily Routine Writing",
+          "content": "Every day I wake up...",
+          "status": "reviewed",
+          "submittedAt": 1703721600000,
+          "feedback": "Great work! Consider using more varied vocabulary.",
+          "score": 85
+        }
+      ]
+    }
+  }
+}
+```
+
+---
+
+### 3.9 Error Handling
+
+#### 3.9.1 Error Response Format
 
 **Message Type**: `ERROR_RESPONSE`
 
@@ -1130,6 +1305,22 @@ GET_CONTACT_LIST_REQUEST / GET_CONTACT_LIST_RESPONSE
 SEND_MESSAGE_REQUEST / SEND_MESSAGE_RESPONSE
 GET_CHAT_HISTORY_REQUEST / GET_CHAT_HISTORY_RESPONSE
 MARK_MESSAGES_READ_REQUEST / MARK_MESSAGES_READ_RESPONSE
+
+# Voice Call
+VOICE_CALL_INITIATE_REQUEST / VOICE_CALL_INITIATE_RESPONSE
+VOICE_CALL_ACCEPT_REQUEST / VOICE_CALL_ACCEPT_RESPONSE
+VOICE_CALL_REJECT_REQUEST / VOICE_CALL_REJECT_RESPONSE
+VOICE_CALL_END_REQUEST / VOICE_CALL_END_RESPONSE
+VOICE_CALL_GET_STATUS_REQUEST / VOICE_CALL_GET_STATUS_RESPONSE
+
+# Voice Call Push Notifications
+VOICE_CALL_INCOMING
+VOICE_CALL_ACCEPTED
+VOICE_CALL_REJECTED
+VOICE_CALL_ENDED
+
+# Teacher Feedback
+GET_USER_SUBMISSIONS_REQUEST / GET_USER_SUBMISSIONS_RESPONSE
 
 # Push Notifications
 RECEIVE_MESSAGE

@@ -34,8 +34,11 @@ The Core module defines **domain entities** and **value types** that represent t
 | `ChatMessage` | `chat_message.h` | Message between two users with read status |
 | `Exercise` | `exercise.h` | Writing exercise requiring teacher review |
 | `ExerciseSubmission` | `exercise.h` | Student submission with teacher feedback |
-| `Game` | `game.h` | Interactive matching game with word/sentence pairs |
+| `Game` | `game.h` | Interactive matching game with word/sentence/picture pairs |
 | `GameSession` | `game.h` | Player's game attempt with score tracking |
+| `PicturePair` | `game.h` | Picture matching pair with word and image source |
+| `ImageSourceType` | `game.h` | Enum for image source types (LocalFile, RemoteUrl, Embedded) |
+| `VoiceCall` | `voice_call.h` | Voice call entity with caller, callee, status, and timestamps |
 
 **Type Definitions** (`types.h`):
 - Enums: `UserRole`, `Level`, `Topic`, `QuestionType`, `ExerciseType`, `GameType`, `SubmissionStatus`
@@ -79,7 +82,7 @@ The Protocol module handles **message serialization**, **JSON parsing**, and **p
 
 | Class/Namespace | File | Role |
 |-----------------|------|------|
-| `MessageType` | `message_types.h` | Constants for all 40+ protocol message types |
+| `MessageType` | `message_types.h` | Constants for all 50+ protocol message types (including voice call) |
 | `JsonParser` | `json_parser.h` | Lightweight JSON parsing without external libraries |
 | `JsonBuilder` | `json_builder.h` | Fluent API for constructing JSON responses |
 | `utils` | `utils.h` | Timestamp, ID generation, session token utilities |
@@ -139,6 +142,7 @@ The Repository module defines **data access interfaces** (contracts) for all ent
 | `IChatRepository` | `i_chat_repository.h` | Message storage, conversation queries, read status |
 | `IExerciseRepository` | `i_exercise_repository.h` | Exercise and submission management |
 | `IGameRepository` | `i_game_repository.h` | Game and session tracking |
+| `IVoiceCallRepository` | `i_voice_call_repository.h` | Voice call management and status tracking |
 
 **Common Interface Pattern**:
 
@@ -213,6 +217,7 @@ Provides **concrete implementations** of repository interfaces. Two implementati
 | `BridgeTestRepository` | `bridge_repositories_ext.h` | Wraps tests map |
 | `BridgeExerciseRepository` | `bridge_repositories_ext.h` | Wraps exercises and submissions |
 | `BridgeGameRepository` | `bridge_repositories_ext.h` | Wraps games and sessions |
+| `BridgeVoiceCallRepository` | `bridge_repositories_ext.h` | Wraps voice calls map |
 
 **Bridge Pattern Example**:
 
@@ -284,8 +289,9 @@ Defines **service interfaces** and **result types** for business operations. Ser
 | `ILessonService` | `i_lesson_service.h` | Lesson retrieval and filtering |
 | `ITestService` | `i_test_service.h` | Test management and grading |
 | `IChatService` | `i_chat_service.h` | Messaging and online users |
-| `IExerciseService` | `i_exercise_service.h` | Exercise workflow with teacher review |
-| `IGameService` | `i_game_service.h` | Game sessions and leaderboards |
+| `IExerciseService` | `i_exercise_service.h` | Exercise workflow with teacher review and feedback |
+| `IGameService` | `i_game_service.h` | Game sessions with picture matching support |
+| `IVoiceCallService` | `i_voice_call_service.h` | Voice call initiation, acceptance, rejection, and status |
 
 **Data Transfer Objects (DTOs)**:
 
@@ -352,9 +358,10 @@ Provides **concrete implementations** of service interfaces. Contains all **busi
 | `LessonService` | `lesson_service.h/cpp` | Lesson queries with level filtering |
 | `TestService` | `test_service.h/cpp` | Test retrieval and automatic grading |
 | `ChatService` | `chat_service.h/cpp` | Message sending, read status |
-| `ExerciseService` | `exercise_service.h/cpp` | Submission and teacher review workflow |
-| `GameService` | `game_service.h/cpp` | Game session management, scoring |
-| `ServiceContainer` | `service_container.h` | Dependency injection container |
+| `ExerciseService` | `exercise_service.h/cpp` | Submission, teacher review, and feedback viewer |
+| `GameService` | `game_service.h/cpp` | Game session management with picture matching |
+| `VoiceCallService` | `voice_call_service.h/cpp` | Voice call lifecycle management |
+| `ServiceContainer` | `service_container.h` | Dependency injection container (8 services) |
 
 **ServiceContainer** (Composition Root):
 
@@ -368,7 +375,8 @@ public:
         ITestRepository& testRepo,
         IChatRepository& chatRepo,
         IExerciseRepository& exerciseRepo,
-        IGameRepository& gameRepo);
+        IGameRepository& gameRepo,
+        IVoiceCallRepository& voiceCallRepo);
 
     IAuthService& auth();
     ILessonService& lessons();
@@ -376,6 +384,7 @@ public:
     IChatService& chat();
     IExerciseService& exercises();
     IGameService& games();
+    IVoiceCallService& voiceCalls();
 };
 ```
 
@@ -525,6 +534,9 @@ Presentation Layer
 | Add a new DTO | `include/service/i_*_service.h` |
 | Change JSON format | `include/protocol/json_*.h` |
 | Add database support | `src/repository/` (new implementation) |
+| Add voice call features | `voice_call_service.cpp`, handlers in `server.cpp` |
+| Add picture matching images | `game.h` (PicturePair), `gui_main.cpp` (GtkImage) |
+| Add teacher feedback features | `exercise_service.cpp`, `server.cpp` handlers |
 
 ---
 
