@@ -1,13 +1,16 @@
 #include "client_bridge.h"
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <gtk/gtk.h>
+#include <gio/gio.h>
 #include <iostream>
 #include <map>
 #include <regex>
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 // Forward declaration for chat conversation handler (after including gtk)
@@ -394,6 +397,67 @@ static GdkPixbuf *create_placeholder_pixbuf(const std::string &color,
   return pixbuf;
 }
 
+// Load image from URL using curl command (fallback method)
+static GdkPixbuf *load_image_from_url(const std::string &url, int width, int height) {
+  GdkPixbuf *pixbuf = nullptr;
+  GError *error = nullptr;
+
+  g_print("[LOAD_URL] Downloading: %s\n", url.c_str());
+
+  // Method 1: Try GIO/GVFS first (works if gvfs is installed)
+  GFile *file = g_file_new_for_uri(url.c_str());
+  if (file) {
+    GInputStream *stream = G_INPUT_STREAM(g_file_read(file, nullptr, &error));
+    if (stream && !error) {
+      pixbuf = gdk_pixbuf_new_from_stream_at_scale(stream, width, height, TRUE, nullptr, &error);
+      g_input_stream_close(stream, nullptr, nullptr);
+      g_object_unref(stream);
+    }
+    if (error) {
+      g_error_free(error);
+      error = nullptr;
+    }
+    g_object_unref(file);
+  }
+
+  // Method 2: Fallback to curl if GIO failed
+  if (!pixbuf) {
+    g_print("[LOAD_URL] GIO failed, trying curl...\n");
+
+    // Create temp file
+    char tmpfile[] = "/tmp/img_XXXXXX.png";
+    int fd = mkstemps(tmpfile, 4);
+    if (fd >= 0) {
+      close(fd);
+
+      // Download with curl
+      std::string cmd = "curl -sL -o \"" + std::string(tmpfile) + "\" \"" + url + "\" 2>/dev/null";
+      int ret = system(cmd.c_str());
+
+      if (ret == 0) {
+        // Load from temp file
+        pixbuf = gdk_pixbuf_new_from_file_at_scale(tmpfile, width, height, TRUE, &error);
+        if (error) {
+          g_warning("Failed to load downloaded image: %s", error->message);
+          g_error_free(error);
+          pixbuf = nullptr;
+        }
+      }
+
+      // Cleanup temp file
+      unlink(tmpfile);
+    }
+  }
+
+  if (pixbuf) {
+    g_print("[LOAD_URL] Successfully loaded image from URL\n");
+  } else {
+    g_print("[LOAD_URL] Failed to load image from URL\n");
+  }
+
+  return pixbuf;
+}
+
 // Load image from various sources
 static GdkPixbuf *load_game_image(const std::string &source, int width,
                                   int height) {
@@ -408,8 +472,18 @@ static GdkPixbuf *load_game_image(const std::string &source, int width,
             color.c_str(), emoji.c_str());
     pixbuf = create_placeholder_pixbuf(color, emoji, width, height);
   }
-  // Check if it's a local file
-  else if (source.find("http://") != 0 && source.find("https://") != 0) {
+  // Check if it's a URL (http or https)
+  else if (source.find("http://") == 0 || source.find("https://") == 0) {
+    g_print("[LOAD_IMAGE] Loading from URL\n");
+    pixbuf = load_image_from_url(source, width, height);
+    if (!pixbuf) {
+      // Fallback to loading indicator if URL fails
+      g_print("[LOAD_IMAGE] URL load failed, using fallback\n");
+      pixbuf = create_placeholder_pixbuf("#E74C3C", "!", width, height);
+    }
+  }
+  // Local file
+  else {
     g_print("[LOAD_IMAGE] Loading local file\n");
     GError *error = nullptr;
     pixbuf = gdk_pixbuf_new_from_file_at_scale(source.c_str(), width, height,
@@ -418,13 +492,8 @@ static GdkPixbuf *load_game_image(const std::string &source, int width,
       g_warning("Failed to load image %s: %s", source.c_str(), error->message);
       g_error_free(error);
       // Create error placeholder
-      pixbuf = create_placeholder_pixbuf("#888888", "❌", width, height);
+      pixbuf = create_placeholder_pixbuf("#888888", "?", width, height);
     }
-  }
-  // URL - create placeholder with URL indicator
-  else {
-    g_print("[LOAD_IMAGE] URL detected, using placeholder\n");
-    pixbuf = create_placeholder_pixbuf("#3498DB", "🌐", width, height);
   }
 
   g_print("[LOAD_IMAGE] pixbuf=%p\n", (void*)pixbuf);

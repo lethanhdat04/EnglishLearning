@@ -1318,7 +1318,7 @@ Instead of "important" -> crucial, vital, significant
     games[game3.gameId] = game3;
 
     // Game 4: Picture Matching (Fruits - beginner level)
-    // Image format: "placeholder:color:emoji" for GUI to render colored placeholders
+    // Using real image URLs from free image sources
     Game game4;
     game4.gameId = "game_004";
     game4.gameType = "picture_match";
@@ -1327,12 +1327,12 @@ Instead of "important" -> crucial, vital, significant
     game4.level = "beginner";
     game4.topic = "vocabulary";
     game4.picturePairs = {
-        {"Apple", "placeholder:#FF6B6B:🍎"},
-        {"Banana", "placeholder:#FFE66D:🍌"},
-        {"Orange", "placeholder:#FFA94D:🍊"},
-        {"Grapes", "placeholder:#9B59B6:🍇"},
-        {"Watermelon", "placeholder:#2ECC71:🍉"},
-        {"Strawberry", "placeholder:#E74C3C:🍓"}
+        {"Apple", "https://cdn-icons-png.flaticon.com/128/415/415682.png"},
+        {"Banana", "https://cdn-icons-png.flaticon.com/128/3143/3143643.png"},
+        {"Orange", "https://cdn-icons-png.flaticon.com/128/415/415733.png"},
+        {"Grapes", "https://cdn-icons-png.flaticon.com/128/765/765560.png"},
+        {"Watermelon", "https://cdn-icons-png.flaticon.com/128/1514/1514933.png"},
+        {"Strawberry", "https://cdn-icons-png.flaticon.com/128/590/590772.png"}
     };
     game4.timeLimit = 120;
     game4.maxScore = 100;
@@ -1347,12 +1347,12 @@ Instead of "important" -> crucial, vital, significant
     game5.level = "intermediate";
     game5.topic = "vocabulary";
     game5.picturePairs = {
-        {"Cat", "placeholder:#FFB347:🐱"},
-        {"Dog", "placeholder:#8B4513:🐕"},
-        {"Bird", "placeholder:#87CEEB:🐦"},
-        {"Fish", "placeholder:#4169E1:🐟"},
-        {"Elephant", "placeholder:#808080:🐘"},
-        {"Lion", "placeholder:#DAA520:🦁"}
+        {"Cat", "https://cdn-icons-png.flaticon.com/128/1864/1864514.png"},
+        {"Dog", "https://cdn-icons-png.flaticon.com/128/1998/1998627.png"},
+        {"Bird", "https://cdn-icons-png.flaticon.com/128/3069/3069186.png"},
+        {"Fish", "https://cdn-icons-png.flaticon.com/128/2219/2219126.png"},
+        {"Elephant", "https://cdn-icons-png.flaticon.com/128/2395/2395841.png"},
+        {"Lion", "https://cdn-icons-png.flaticon.com/128/2395/2395816.png"}
     };
     game5.timeLimit = 100;
     game5.maxScore = 100;
