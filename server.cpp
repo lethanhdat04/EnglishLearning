@@ -2409,7 +2409,7 @@ std::string handleGetGameList(const std::string& json) {
     for (const auto& pair : games) {
         const Game& game = pair.second;
         bool typeMatch = gameType.empty() || gameType == "all" || game.gameType == gameType;
-        bool levelMatch = level.empty() || game.level == level;
+        bool levelMatch = level.empty() || level == "all" || game.level == level;
 
         if (typeMatch && levelMatch) {
             if (!first) gamesJson << ",";
