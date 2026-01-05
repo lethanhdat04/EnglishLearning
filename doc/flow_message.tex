@@ -1,0 +1,1963 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[vietnamese]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{float}
+
+\usetikzlibrary{shapes.geometric, arrows, positioning, fit, backgrounds, calc}
+
+\geometry{margin=2.5cm}
+
+% Colors
+\definecolor{clientcolor}{RGB}{52, 152, 219}
+\definecolor{servercolor}{RGB}{46, 204, 113}
+\definecolor{msgcolor}{RGB}{241, 196, 15}
+\definecolor{notifycolor}{RGB}{155, 89, 182}
+\definecolor{codegreen}{RGB}{0,128,0}
+\definecolor{codegray}{RGB}{128,128,128}
+\definecolor{codeblue}{RGB}{0,0,255}
+\definecolor{backcolour}{RGB}{245,245,245}
+
+% TikZ Styles
+\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=red!30]
+\tikzstyle{process} = [rectangle, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=orange!30]
+\tikzstyle{decision} = [diamond, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=green!30, aspect=2]
+\tikzstyle{io} = [trapezium, trapezium left angle=70, trapezium right angle=110, minimum width=2cm, minimum height=1cm, text centered, draw=black, fill=blue!20]
+\tikzstyle{arrow} = [thick,->,>=stealth]
+\tikzstyle{client} = [rectangle, rounded corners, minimum width=2cm, minimum height=0.8cm, draw=clientcolor, fill=clientcolor!20, font=\small]
+\tikzstyle{server} = [rectangle, rounded corners, minimum width=2cm, minimum height=0.8cm, draw=servercolor, fill=servercolor!20, font=\small]
+\tikzstyle{msg} = [rectangle, minimum width=4cm, minimum height=0.6cm, draw=msgcolor, fill=msgcolor!20, font=\scriptsize]
+\tikzstyle{notify} = [rectangle, minimum width=4cm, minimum height=0.6cm, draw=notifycolor, fill=notifycolor!20, font=\scriptsize]
+
+% Listings style for JSON
+\lstdefinestyle{jsonstyle}{
+    backgroundcolor=\color{backcolour},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    numberstyle=\tiny\color{codegray},
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single,
+    framerule=0.5pt,
+    rulecolor=\color{gray}
+}
+
+\lstset{style=jsonstyle}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyhead[R]{English Learning App}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% Title formatting
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+
+\begin{document}
+
+% Title Page
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+
+    {\Huge\bfseries Quy Trình Chức Năng\\[0.3cm] và Bản Tin Giao Thức\par}
+
+    \vspace{1cm}
+    {\Large English Learning Application\par}
+
+    \vspace{2cm}
+
+    \begin{tikzpicture}[scale=0.8]
+        % Client-Server Architecture
+        \node[rectangle, draw=clientcolor, fill=clientcolor!20, minimum width=4cm, minimum height=2cm, rounded corners] (client) at (0,0) {\Large Client};
+        \node[rectangle, draw=servercolor, fill=servercolor!20, minimum width=4cm, minimum height=2cm, rounded corners] (server) at (8,0) {\Large Server};
+
+        % Arrows
+        \draw[->, thick, clientcolor] (client.east) -- node[above, font=\small] {Request} (server.west);
+        \draw[->, thick, servercolor] (server.west) ++(0,-0.3) -- node[below, font=\small] {Response} ++(-4,0);
+    \end{tikzpicture}
+
+    \vspace{2cm}
+
+    {\large Phiên bản: 1.0\par}
+    {\large Ngày: \today\par}
+
+    \vfill
+
+    {\large Tài liệu mô tả chi tiết các quy trình\\và bản tin sử dụng cho từng chức năng\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+%====================================================================
+\section{Tổng Quan}
+%====================================================================
+
+\subsection{Giới Thiệu}
+
+Tài liệu này mô tả chi tiết các quy trình (flows) của từng chức năng trong ứng dụng English Learning, bao gồm:
+\begin{enumerate}
+    \item \textbf{Đăng ký/Đăng nhập} - Quản lý tài khoản và phiên làm việc
+    \item \textbf{Học bài} - Xem và học các bài học
+    \item \textbf{Làm bài kiểm tra} - Tham gia các bài test
+    \item \textbf{Làm bài tập} - Hoàn thành bài tập và nhận phản hồi
+    \item \textbf{Chat} - Giao tiếp với người dùng khác
+    \item \textbf{Chơi game} - Tham gia các trò chơi học tiếng Anh
+\end{enumerate}
+
+\subsection{Quy Ước Bản Tin}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Loại} & \textbf{Hướng} & \textbf{Mô tả} \\
+\hline
+REQUEST & Client $\rightarrow$ Server & Yêu cầu từ client \\
+RESPONSE & Server $\rightarrow$ Client & Phản hồi từ server \\
+NOTIFICATION & Server $\rightarrow$ Client & Thông báo push (không cần request) \\
+\hline
+\end{tabular}
+\caption{Phân loại bản tin}
+\end{table}
+
+\subsection{Cấu Trúc Bản Tin Chung}
+
+\begin{lstlisting}[caption={Cấu trúc JSON chung}]
+{
+    "messageType": "MESSAGE_TYPE",
+    "sessionToken": "token_string",    // Bat buoc sau khi dang nhap
+    "timestamp": 1704067200000,        // Unix timestamp (ms)
+    "payload": {
+        // Du lieu cu the cho tung loai ban tin
+    }
+}
+\end{lstlisting}
+
+\newpage
+%====================================================================
+\section{Đăng Ký / Đăng Nhập (Authentication)}
+%====================================================================
+
+\subsection{Mô Tả Chức Năng}
+
+Chức năng xác thực cho phép người dùng:
+\begin{itemize}
+    \item Đăng ký tài khoản mới
+    \item Đăng nhập vào hệ thống
+    \item Nhận token phiên làm việc
+    \item Phân quyền theo vai trò (Student/Teacher/Admin)
+\end{itemize}
+
+\subsection{Quy Trình Đăng Ký}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.5cm, scale=0.85, transform shape]
+    % Nodes
+    \node (start) [startstop] {Bắt đầu};
+    \node (input) [io, below of=start] {Nhập thông tin};
+    \node (validate) [process, below of=input] {Validate dữ liệu};
+    \node (check) [decision, below of=validate, yshift=-0.5cm] {Hợp lệ?};
+    \node (send) [process, below of=check, yshift=-0.5cm] {Gửi REGISTER\_REQUEST};
+    \node (wait) [process, below of=send] {Chờ response};
+    \node (checkResp) [decision, below of=wait, yshift=-0.5cm] {Success?};
+    \node (success) [startstop, below of=checkResp, yshift=-0.5cm] {Đăng ký thành công};
+    \node (error) [process, right of=check, xshift=3cm] {Hiển thị lỗi};
+    \node (retry) [process, right of=checkResp, xshift=3cm] {Hiển thị lỗi};
+
+    % Arrows
+    \draw [arrow] (start) -- (input);
+    \draw [arrow] (input) -- (validate);
+    \draw [arrow] (validate) -- (check);
+    \draw [arrow] (check) -- node[left] {Có} (send);
+    \draw [arrow] (check) -- node[above] {Không} (error);
+    \draw [arrow] (error) |- (input);
+    \draw [arrow] (send) -- (wait);
+    \draw [arrow] (wait) -- (checkResp);
+    \draw [arrow] (checkResp) -- node[left] {Có} (success);
+    \draw [arrow] (checkResp) -- node[above] {Không} (retry);
+    \draw [arrow] (retry) |- (input);
+\end{tikzpicture}
+\caption{Flowchart quy trình đăng ký}
+\end{figure}
+
+\subsection{Quy Trình Đăng Nhập}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.5cm, scale=0.85, transform shape]
+    % Nodes
+    \node (start) [startstop] {Bắt đầu};
+    \node (input) [io, below of=start] {Nhập Email/Password};
+    \node (validate) [process, below of=input] {Validate định dạng};
+    \node (check) [decision, below of=validate, yshift=-0.5cm] {Hợp lệ?};
+    \node (connect) [process, below of=check, yshift=-0.5cm] {Kết nối Server};
+    \node (send) [process, below of=connect] {Gửi LOGIN\_REQUEST};
+    \node (wait) [process, below of=send] {Chờ LOGIN\_RESPONSE};
+    \node (checkResp) [decision, below of=wait, yshift=-0.5cm] {Success?};
+    \node (store) [process, below of=checkResp, yshift=-0.5cm] {Lưu sessionToken};
+    \node (menu) [process, below of=store] {Hiển thị menu theo role};
+    \node (end) [startstop, below of=menu] {Hoàn thành};
+    \node (error) [process, right of=check, xshift=3cm] {Hiển thị lỗi};
+    \node (retry) [process, right of=checkResp, xshift=3cm] {Hiển thị lỗi};
+
+    % Arrows
+    \draw [arrow] (start) -- (input);
+    \draw [arrow] (input) -- (validate);
+    \draw [arrow] (validate) -- (check);
+    \draw [arrow] (check) -- node[left] {Có} (connect);
+    \draw [arrow] (check) -- node[above] {Không} (error);
+    \draw [arrow] (error) |- (input);
+    \draw [arrow] (connect) -- (send);
+    \draw [arrow] (send) -- (wait);
+    \draw [arrow] (wait) -- (checkResp);
+    \draw [arrow] (checkResp) -- node[left] {Có} (store);
+    \draw [arrow] (checkResp) -- node[above] {Không} (retry);
+    \draw [arrow] (retry) |- (input);
+    \draw [arrow] (store) -- (menu);
+    \draw [arrow] (menu) -- (end);
+\end{tikzpicture}
+\caption{Flowchart quy trình đăng nhập}
+\end{figure}
+
+\subsection{Sequence Diagram - Đăng Ký}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.9, transform shape]
+    % Lifelines
+    \node[client] (client) at (0,0) {Client};
+    \node[server] (server) at (8,0) {Server};
+
+    \draw[dashed] (0,-0.5) -- (0,-8);
+    \draw[dashed] (8,-0.5) -- (8,-8);
+
+    % Messages
+    \draw[->, thick, clientcolor] (0,-1.5) -- node[above, font=\scriptsize] {REGISTER\_REQUEST} (8,-1.5);
+    \draw[<-, thick, servercolor] (0,-3) -- node[above, font=\scriptsize] {REGISTER\_RESPONSE (success)} (8,-3);
+
+    % Activation boxes
+    \fill[clientcolor!30] (-0.15,-1.3) rectangle (0.15,-1.7);
+    \fill[servercolor!30] (7.85,-1.5) rectangle (8.15,-2.8);
+
+    % Notes
+    \node[font=\scriptsize, align=left] at (4,-2.2) {Server validate \& tạo user};
+
+    % Alternative flow
+    \draw[dashed] (-1,-4) rectangle (9,-6);
+    \node[font=\scriptsize] at (0,-4.3) {alt [Email đã tồn tại]};
+    \draw[<-, thick, red] (0,-5) -- node[above, font=\scriptsize] {REGISTER\_RESPONSE (error)} (8,-5);
+\end{tikzpicture}
+\caption{Sequence diagram đăng ký}
+\end{figure}
+
+\subsection{Sequence Diagram - Đăng Nhập}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.9, transform shape]
+    % Lifelines
+    \node[client] (client) at (0,0) {Client};
+    \node[server] (server) at (8,0) {Server};
+
+    \draw[dashed] (0,-0.5) -- (0,-10);
+    \draw[dashed] (8,-0.5) -- (8,-10);
+
+    % Connect
+    \draw[->, thick] (0,-1.5) -- node[above, font=\scriptsize] {TCP Connect} (8,-1.5);
+    \draw[<-, thick] (0,-2) -- node[above, font=\scriptsize] {Connection OK} (8,-2);
+
+    % Login
+    \draw[->, thick, clientcolor] (0,-3) -- node[above, font=\scriptsize] {LOGIN\_REQUEST} (8,-3);
+
+    % Server processing
+    \fill[servercolor!30] (7.85,-3) rectangle (8.15,-5.5);
+    \node[font=\scriptsize, align=left, anchor=west] at (8.3,-4) {Validate credentials\\Create session\\Generate token};
+
+    \draw[<-, thick, servercolor] (0,-5.5) -- node[above, font=\scriptsize] {LOGIN\_RESPONSE} (8,-5.5);
+
+    % Client processing
+    \fill[clientcolor!30] (-0.15,-5.5) rectangle (0.15,-7);
+    \node[font=\scriptsize, align=right, anchor=east] at (-0.3,-6.25) {Store token\\Parse role\\Show menu};
+
+    % Alternative
+    \draw[dashed] (-1,-7.5) rectangle (9,-9.5);
+    \node[font=\scriptsize] at (0,-7.8) {alt [Invalid credentials]};
+    \draw[<-, thick, red] (0,-8.5) -- node[above, font=\scriptsize] {LOGIN\_RESPONSE (error)} (8,-8.5);
+\end{tikzpicture}
+\caption{Sequence diagram đăng nhập}
+\end{figure}
+
+\subsection{Danh Sách Bản Tin}
+
+\begin{longtable}{|p{5cm}|p{2.5cm}|p{6cm}|}
+\hline
+\textbf{Message Type} & \textbf{Hướng} & \textbf{Mô tả} \\
+\hline
+\endhead
+REGISTER\_REQUEST & C $\rightarrow$ S & Yêu cầu đăng ký tài khoản mới \\
+\hline
+REGISTER\_RESPONSE & S $\rightarrow$ C & Kết quả đăng ký (success/error) \\
+\hline
+LOGIN\_REQUEST & C $\rightarrow$ S & Yêu cầu đăng nhập \\
+\hline
+LOGIN\_RESPONSE & S $\rightarrow$ C & Kết quả đăng nhập + sessionToken + role \\
+\hline
+SET\_LEVEL\_REQUEST & C $\rightarrow$ S & Cập nhật level người dùng \\
+\hline
+SET\_LEVEL\_RESPONSE & S $\rightarrow$ C & Kết quả cập nhật level \\
+\hline
+\caption{Danh sách bản tin Authentication}
+\end{longtable}
+
+\subsection{Chi Tiết Bản Tin}
+
+\subsubsection{REGISTER\_REQUEST}
+
+\begin{lstlisting}[caption={REGISTER\_REQUEST}]
+{
+    "messageType": "REGISTER_REQUEST",
+    "payload": {
+        "fullname": "Nguyen Van A",
+        "email": "nguyenvana@example.com",
+        "password": "password123",
+        "confirmPassword": "password123"
+    }
+}
+\end{lstlisting}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|l|p{5cm}|}
+\hline
+\textbf{Trường} & \textbf{Kiểu} & \textbf{Bắt buộc} & \textbf{Mô tả} \\
+\hline
+fullname & string & Có & Họ tên người dùng \\
+email & string & Có & Email (unique) \\
+password & string & Có & Mật khẩu ($\geq$ 6 ký tự) \\
+confirmPassword & string & Có & Xác nhận mật khẩu \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{REGISTER\_RESPONSE}
+
+\begin{lstlisting}[caption={REGISTER\_RESPONSE - Success}]
+{
+    "messageType": "REGISTER_RESPONSE",
+    "timestamp": 1704067200000,
+    "payload": {
+        "status": "success",
+        "message": "Registration successful",
+        "data": {
+            "userId": "user_abc123"
+        }
+    }
+}
+\end{lstlisting}
+
+\subsubsection{LOGIN\_REQUEST}
+
+\begin{lstlisting}[caption={LOGIN\_REQUEST}]
+{
+    "messageType": "LOGIN_REQUEST",
+    "payload": {
+        "email": "student@example.com",
+        "password": "password123"
+    }
+}
+\end{lstlisting}
+
+\subsubsection{LOGIN\_RESPONSE}
+
+\begin{lstlisting}[caption={LOGIN\_RESPONSE - Success}]
+{
+    "messageType": "LOGIN_RESPONSE",
+    "timestamp": 1704067200000,
+    "payload": {
+        "status": "success",
+        "message": "Login successfully",
+        "data": {
+            "userId": "user_001",
+            "fullname": "Nguyen Van A",
+            "email": "student@example.com",
+            "level": "beginner",
+            "role": "student",
+            "sessionToken": "token_xyz789",
+            "expiresAt": 1704070800000
+        }
+    }
+}
+\end{lstlisting}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|p{6cm}|}
+\hline
+\textbf{Trường} & \textbf{Kiểu} & \textbf{Mô tả} \\
+\hline
+userId & string & ID người dùng \\
+fullname & string & Họ tên \\
+email & string & Email \\
+level & string & beginner/intermediate/advanced \\
+role & string & student/teacher/admin \\
+sessionToken & string & Token phiên làm việc \\
+expiresAt & int64 & Thời điểm hết hạn (Unix ms) \\
+\hline
+\end{tabular}
+\end{table}
+
+\newpage
+%====================================================================
+\section{Học Bài (Lessons)}
+%====================================================================
+
+\subsection{Mô Tả Chức Năng}
+
+Chức năng học bài cho phép:
+\begin{itemize}
+    \item Xem danh sách bài học theo level và topic
+    \item Xem chi tiết nội dung bài học
+    \item Xem video và nghe audio bài học
+\end{itemize}
+
+\subsection{Quy Trình Học Bài}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.5cm, scale=0.85, transform shape]
+    % Nodes
+    \node (start) [startstop] {Chọn "Học bài"};
+    \node (send1) [process, below of=start] {Gửi GET\_LESSONS\_REQUEST};
+    \node (wait1) [process, below of=send1] {Nhận GET\_LESSONS\_RESPONSE};
+    \node (display) [io, below of=wait1] {Hiển thị danh sách bài};
+    \node (select) [process, below of=display] {Chọn bài học};
+    \node (send2) [process, below of=select] {Gửi GET\_LESSON\_DETAIL\_REQUEST};
+    \node (wait2) [process, below of=send2] {Nhận GET\_LESSON\_DETAIL\_RESPONSE};
+    \node (show) [io, below of=wait2] {Hiển thị nội dung};
+    \node (media) [decision, below of=show, yshift=-0.5cm] {Có media?};
+    \node (play) [process, below of=media, yshift=-0.5cm] {Phát video/audio};
+    \node (end) [startstop, below of=play] {Hoàn thành};
+    \node (skip) [process, right of=media, xshift=3cm] {Bỏ qua};
+
+    % Arrows
+    \draw [arrow] (start) -- (send1);
+    \draw [arrow] (send1) -- (wait1);
+    \draw [arrow] (wait1) -- (display);
+    \draw [arrow] (display) -- (select);
+    \draw [arrow] (select) -- (send2);
+    \draw [arrow] (send2) -- (wait2);
+    \draw [arrow] (wait2) -- (show);
+    \draw [arrow] (show) -- (media);
+    \draw [arrow] (media) -- node[left] {Có} (play);
+    \draw [arrow] (media) -- node[above] {Không} (skip);
+    \draw [arrow] (play) -- (end);
+    \draw [arrow] (skip) |- (end);
+\end{tikzpicture}
+\caption{Flowchart quy trình học bài}
+\end{figure}
+
+\subsection{Sequence Diagram}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.85, transform shape]
+    % Lifelines
+    \node[client] (client) at (0,0) {Client};
+    \node[server] (server) at (8,0) {Server};
+
+    \draw[dashed] (0,-0.5) -- (0,-12);
+    \draw[dashed] (8,-0.5) -- (8,-12);
+
+    % Get lessons list
+    \draw[->, thick, clientcolor] (0,-1.5) -- node[above, font=\scriptsize] {GET\_LESSONS\_REQUEST} (8,-1.5);
+    \fill[servercolor!30] (7.85,-1.5) rectangle (8.15,-2.5);
+    \draw[<-, thick, servercolor] (0,-3) -- node[above, font=\scriptsize] {GET\_LESSONS\_RESPONSE} (8,-3);
+
+    % User selects
+    \node[font=\scriptsize, align=center] at (0,-4) {User chọn\\bài học};
+
+    % Get lesson detail
+    \draw[->, thick, clientcolor] (0,-5) -- node[above, font=\scriptsize] {GET\_LESSON\_DETAIL\_REQUEST} (8,-5);
+    \fill[servercolor!30] (7.85,-5) rectangle (8.15,-6);
+    \draw[<-, thick, servercolor] (0,-6.5) -- node[above, font=\scriptsize] {GET\_LESSON\_DETAIL\_RESPONSE} (8,-6.5);
+
+    % Display content
+    \fill[clientcolor!30] (-0.15,-6.5) rectangle (0.15,-8);
+    \node[font=\scriptsize, align=right, anchor=east] at (-0.3,-7.25) {Parse content\\Display text\\Load media};
+
+    % Optional media
+    \draw[dashed] (-1,-8.5) rectangle (9,-11);
+    \node[font=\scriptsize] at (0,-8.8) {opt [Có video/audio]};
+    \node[font=\scriptsize, align=center] at (0,-10) {Phát media\\từ URL};
+\end{tikzpicture}
+\caption{Sequence diagram học bài}
+\end{figure}
+
+\subsection{Danh Sách Bản Tin}
+
+\begin{longtable}{|p{5.5cm}|p{2.5cm}|p{5.5cm}|}
+\hline
+\textbf{Message Type} & \textbf{Hướng} & \textbf{Mô tả} \\
+\hline
+\endhead
+GET\_LESSONS\_REQUEST & C $\rightarrow$ S & Lấy danh sách bài học \\
+\hline
+GET\_LESSONS\_RESPONSE & S $\rightarrow$ C & Danh sách bài học \\
+\hline
+GET\_LESSON\_DETAIL\_REQUEST & C $\rightarrow$ S & Lấy chi tiết bài học \\
+\hline
+GET\_LESSON\_DETAIL\_RESPONSE & S $\rightarrow$ C & Nội dung chi tiết bài học \\
+\hline
+\caption{Danh sách bản tin Lesson}
+\end{longtable}
+
+\subsection{Chi Tiết Bản Tin}
+
+\subsubsection{GET\_LESSONS\_REQUEST}
+
+\begin{lstlisting}[caption={GET\_LESSONS\_REQUEST}]
+{
+    "messageType": "GET_LESSONS_REQUEST",
+    "sessionToken": "token_xyz789",
+    "payload": {
+        "level": "beginner",
+        "topic": "grammar"
+    }
+}
+\end{lstlisting}
+
+\subsubsection{GET\_LESSONS\_RESPONSE}
+
+\begin{lstlisting}[caption={GET\_LESSONS\_RESPONSE}]
+{
+    "messageType": "GET_LESSONS_RESPONSE",
+    "payload": {
+        "status": "success",
+        "data": {
+            "total": 2,
+            "lessons": [
+                {
+                    "lessonId": "lesson_001",
+                    "title": "Basic Grammar",
+                    "topic": "grammar",
+                    "level": "beginner",
+                    "description": "Learn basic English grammar"
+                }
+            ]
+        }
+    }
+}
+\end{lstlisting}
+
+\subsubsection{GET\_LESSON\_DETAIL\_REQUEST}
+
+\begin{lstlisting}[caption={GET\_LESSON\_DETAIL\_REQUEST}]
+{
+    "messageType": "GET_LESSON_DETAIL_REQUEST",
+    "sessionToken": "token_xyz789",
+    "payload": {
+        "lessonId": "lesson_001"
+    }
+}
+\end{lstlisting}
+
+\subsubsection{GET\_LESSON\_DETAIL\_RESPONSE}
+
+\begin{lstlisting}[caption={GET\_LESSON\_DETAIL\_RESPONSE}]
+{
+    "messageType": "GET_LESSON_DETAIL_RESPONSE",
+    "payload": {
+        "status": "success",
+        "data": {
+            "lessonId": "lesson_001",
+            "title": "Basic Grammar",
+            "description": "Learn basic English grammar",
+            "level": "beginner",
+            "topic": "grammar",
+            "textContent": "# Introduction to Grammar...",
+            "videoUrl": "https://example.com/video.mp4",
+            "audioUrl": "https://example.com/audio.mp3"
+        }
+    }
+}
+\end{lstlisting}
+
+\newpage
+%====================================================================
+\section{Làm Bài Kiểm Tra (Tests)}
+%====================================================================
+
+\subsection{Mô Tả Chức Năng}
+
+Chức năng làm bài kiểm tra cho phép:
+\begin{itemize}
+    \item Lấy bài test theo level
+    \item Làm các loại câu hỏi: multiple choice, fill blank, sentence order
+    \item Nộp bài và nhận kết quả chấm điểm
+\end{itemize}
+
+\subsection{Quy Trình Làm Bài Kiểm Tra}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.3cm, scale=0.8, transform shape]
+    % Nodes
+    \node (start) [startstop] {Chọn "Làm bài test"};
+    \node (send1) [process, below of=start] {Gửi GET\_TEST\_REQUEST};
+    \node (wait1) [process, below of=send1] {Nhận GET\_TEST\_RESPONSE};
+    \node (display) [io, below of=wait1] {Hiển thị câu hỏi};
+    \node (timer) [process, below of=display] {Bắt đầu đếm giờ};
+    \node (answer) [io, below of=timer] {User trả lời};
+    \node (check) [decision, below of=answer, yshift=-0.3cm] {Còn câu hỏi?};
+    \node (next) [process, right of=check, xshift=3cm] {Câu tiếp theo};
+    \node (confirm) [decision, below of=check, yshift=-0.5cm] {Nộp bài?};
+    \node (send2) [process, below of=confirm, yshift=-0.3cm] {Gửi SUBMIT\_TEST\_REQUEST};
+    \node (wait2) [process, below of=send2] {Nhận SUBMIT\_TEST\_RESPONSE};
+    \node (result) [io, below of=wait2] {Hiển thị kết quả};
+    \node (end) [startstop, below of=result] {Hoàn thành};
+    \node (back) [process, right of=confirm, xshift=3cm] {Quay lại sửa};
+
+    % Arrows
+    \draw [arrow] (start) -- (send1);
+    \draw [arrow] (send1) -- (wait1);
+    \draw [arrow] (wait1) -- (display);
+    \draw [arrow] (display) -- (timer);
+    \draw [arrow] (timer) -- (answer);
+    \draw [arrow] (answer) -- (check);
+    \draw [arrow] (check) -- node[above] {Có} (next);
+    \draw [arrow] (next) |- (answer);
+    \draw [arrow] (check) -- node[left] {Không} (confirm);
+    \draw [arrow] (confirm) -- node[left] {Có} (send2);
+    \draw [arrow] (confirm) -- node[above] {Không} (back);
+    \draw [arrow] (back) |- (answer);
+    \draw [arrow] (send2) -- (wait2);
+    \draw [arrow] (wait2) -- (result);
+    \draw [arrow] (result) -- (end);
+\end{tikzpicture}
+\caption{Flowchart quy trình làm bài kiểm tra}
+\end{figure}
+
+\subsection{Sequence Diagram}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.85, transform shape]
+    % Lifelines
+    \node[client] (client) at (0,0) {Client};
+    \node[server] (server) at (8,0) {Server};
+
+    \draw[dashed] (0,-0.5) -- (0,-14);
+    \draw[dashed] (8,-0.5) -- (8,-14);
+
+    % Get test
+    \draw[->, thick, clientcolor] (0,-1.5) -- node[above, font=\scriptsize] {GET\_TEST\_REQUEST} (8,-1.5);
+    \fill[servercolor!30] (7.85,-1.5) rectangle (8.15,-2.5);
+    \draw[<-, thick, servercolor] (0,-3) -- node[above, font=\scriptsize] {GET\_TEST\_RESPONSE} (8,-3);
+
+    % User doing test
+    \draw[dashed] (-1,-4) rectangle (1,-7);
+    \node[font=\scriptsize] at (0,-4.3) {loop [Làm bài]};
+    \node[font=\scriptsize, align=center] at (0,-5.5) {Hiển thị câu hỏi\\User trả lời\\Lưu đáp án};
+
+    % Submit
+    \draw[->, thick, clientcolor] (0,-8) -- node[above, font=\scriptsize] {SUBMIT\_TEST\_REQUEST} (8,-8);
+
+    % Server grading
+    \fill[servercolor!30] (7.85,-8) rectangle (8.15,-10);
+    \node[font=\scriptsize, align=left, anchor=west] at (8.3,-9) {Chấm điểm\\So sánh đáp án\\Tính tổng điểm};
+
+    \draw[<-, thick, servercolor] (0,-10.5) -- node[above, font=\scriptsize] {SUBMIT\_TEST\_RESPONSE} (8,-10.5);
+
+    % Display result
+    \fill[clientcolor!30] (-0.15,-10.5) rectangle (0.15,-12);
+    \node[font=\scriptsize, align=right, anchor=east] at (-0.3,-11.25) {Hiển thị điểm\\Chi tiết đáp án\\Grade/Pass};
+\end{tikzpicture}
+\caption{Sequence diagram làm bài kiểm tra}
+\end{figure}
+
+\subsection{Danh Sách Bản Tin}
+
+\begin{longtable}{|p{5cm}|p{2.5cm}|p{6cm}|}
+\hline
+\textbf{Message Type} & \textbf{Hướng} & \textbf{Mô tả} \\
+\hline
+\endhead
+GET\_TEST\_REQUEST & C $\rightarrow$ S & Lấy bài test theo level \\
+\hline
+GET\_TEST\_RESPONSE & S $\rightarrow$ C & Dữ liệu bài test + câu hỏi \\
+\hline
+SUBMIT\_TEST\_REQUEST & C $\rightarrow$ S & Nộp bài test \\
+\hline
+SUBMIT\_TEST\_RESPONSE & S $\rightarrow$ C & Kết quả chấm điểm \\
+\hline
+\caption{Danh sách bản tin Test}
+\end{longtable}
+
+\subsection{Chi Tiết Bản Tin}
+
+\subsubsection{GET\_TEST\_REQUEST}
+
+\begin{lstlisting}[caption={GET\_TEST\_REQUEST}]
+{
+    "messageType": "GET_TEST_REQUEST",
+    "sessionToken": "token_xyz789",
+    "payload": {
+        "level": "beginner"
+    }
+}
+\end{lstlisting}
+
+\subsubsection{GET\_TEST\_RESPONSE}
+
+\begin{lstlisting}[caption={GET\_TEST\_RESPONSE}]
+{
+    "messageType": "GET_TEST_RESPONSE",
+    "payload": {
+        "status": "success",
+        "data": {
+            "testId": "test_001",
+            "title": "Beginner English Test",
+            "timeLimit": 1800,
+            "totalPoints": 100,
+            "questions": [
+                {
+                    "questionId": "q1",
+                    "type": "multiple_choice",
+                    "question": "What is 'apple' in Vietnamese?",
+                    "points": 10,
+                    "options": [
+                        {"id": "a", "text": "Qua cam"},
+                        {"id": "b", "text": "Qua tao"},
+                        {"id": "c", "text": "Qua chuoi"},
+                        {"id": "d", "text": "Qua nho"}
+                    ]
+                },
+                {
+                    "questionId": "q2",
+                    "type": "fill_blank",
+                    "question": "She ___ a student.",
+                    "points": 10
+                },
+                {
+                    "questionId": "q3",
+                    "type": "sentence_order",
+                    "question": "Arrange the words",
+                    "points": 15,
+                    "words": ["is", "a", "This", "book"]
+                }
+            ]
+        }
+    }
+}
+\end{lstlisting}
+
+\subsubsection{SUBMIT\_TEST\_REQUEST}
+
+\begin{lstlisting}[caption={SUBMIT\_TEST\_REQUEST}]
+{
+    "messageType": "SUBMIT_TEST_REQUEST",
+    "sessionToken": "token_xyz789",
+    "payload": {
+        "testId": "test_001",
+        "answers": [
+            {"questionId": "q1", "answer": "b"},
+            {"questionId": "q2", "answer": "is"},
+            {"questionId": "q3", "answer": "This is a book"}
+        ]
+    }
+}
+\end{lstlisting}
+
+\subsubsection{SUBMIT\_TEST\_RESPONSE}
+
+\begin{lstlisting}[caption={SUBMIT\_TEST\_RESPONSE}]
+{
+    "messageType": "SUBMIT_TEST_RESPONSE",
+    "payload": {
+        "status": "success",
+        "data": {
+            "score": 85,
+            "totalPoints": 100,
+            "percentage": "85%",
+            "passed": true,
+            "grade": "B",
+            "correctAnswers": 8,
+            "wrongAnswers": 2,
+            "results": [
+                {
+                    "questionId": "q1",
+                    "correct": true,
+                    "userAnswer": "b",
+                    "correctAnswer": "b"
+                }
+            ]
+        }
+    }
+}
+\end{lstlisting}
+
+\newpage
+%====================================================================
+\section{Làm Bài Tập (Exercises)}
+%====================================================================
+
+\subsection{Mô Tả Chức Năng}
+
+Chức năng làm bài tập bao gồm:
+
+\textbf{Dành cho Student:}
+\begin{itemize}
+    \item Xem danh sách bài tập
+    \item Làm bài tập (writing, speaking, listening)
+    \item Lưu bản nháp
+    \item Nộp bài tập
+    \item Xem phản hồi từ giáo viên
+\end{itemize}
+
+\textbf{Dành cho Teacher:}
+\begin{itemize}
+    \item Xem danh sách bài nộp chờ chấm
+    \item Xem chi tiết bài nộp
+    \item Chấm điểm và gửi phản hồi
+\end{itemize}
+
+\subsection{Quy Trình Student - Làm Bài Tập}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.3cm, scale=0.75, transform shape]
+    % Nodes
+    \node (start) [startstop] {Chọn "Bài tập"};
+    \node (send1) [process, below of=start] {GET\_EXERCISE\_LIST\_REQUEST};
+    \node (wait1) [process, below of=send1] {GET\_EXERCISE\_LIST\_RESPONSE};
+    \node (display) [io, below of=wait1] {Hiển thị danh sách};
+    \node (select) [process, below of=display] {Chọn bài tập};
+    \node (send2) [process, below of=select] {GET\_EXERCISE\_REQUEST};
+    \node (wait2) [process, below of=send2] {GET\_EXERCISE\_RESPONSE};
+    \node (do) [io, below of=wait2] {Làm bài};
+    \node (action) [decision, below of=do, yshift=-0.5cm] {Hành động?};
+    \node (save) [process, below of=action, yshift=-0.5cm, xshift=-3cm] {SAVE\_DRAFT\_REQUEST};
+    \node (submit) [process, below of=action, yshift=-0.5cm, xshift=3cm] {SUBMIT\_EXERCISE\_REQUEST};
+    \node (end) [startstop, below of=action, yshift=-2.5cm] {Hoàn thành};
+
+    % Arrows
+    \draw [arrow] (start) -- (send1);
+    \draw [arrow] (send1) -- (wait1);
+    \draw [arrow] (wait1) -- (display);
+    \draw [arrow] (display) -- (select);
+    \draw [arrow] (select) -- (send2);
+    \draw [arrow] (send2) -- (wait2);
+    \draw [arrow] (wait2) -- (do);
+    \draw [arrow] (do) -- (action);
+    \draw [arrow] (action) -| node[above left, pos=0.3] {Lưu nháp} (save);
+    \draw [arrow] (action) -| node[above right, pos=0.3] {Nộp bài} (submit);
+    \draw [arrow] (save) |- (end);
+    \draw [arrow] (submit) |- (end);
+\end{tikzpicture}
+\caption{Flowchart quy trình làm bài tập (Student)}
+\end{figure}
+
+\subsection{Quy Trình Teacher - Chấm Bài}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.3cm, scale=0.75, transform shape]
+    % Nodes
+    \node (start) [startstop] {Chọn "Chấm bài"};
+    \node (send1) [process, below of=start] {GET\_PENDING\_REVIEWS\_REQUEST};
+    \node (wait1) [process, below of=send1] {GET\_PENDING\_REVIEWS\_RESPONSE};
+    \node (display) [io, below of=wait1] {Hiển thị bài chờ chấm};
+    \node (select) [process, below of=display] {Chọn bài nộp};
+    \node (send2) [process, below of=select] {GET\_SUBMISSION\_DETAIL\_REQUEST};
+    \node (wait2) [process, below of=send2] {GET\_SUBMISSION\_DETAIL\_RESPONSE};
+    \node (review) [io, below of=wait2] {Xem \& chấm bài};
+    \node (send3) [process, below of=review] {REVIEW\_EXERCISE\_REQUEST};
+    \node (wait3) [process, below of=send3] {REVIEW\_EXERCISE\_RESPONSE};
+    \node (end) [startstop, below of=wait3] {Hoàn thành};
+
+    % Arrows
+    \draw [arrow] (start) -- (send1);
+    \draw [arrow] (send1) -- (wait1);
+    \draw [arrow] (wait1) -- (display);
+    \draw [arrow] (display) -- (select);
+    \draw [arrow] (select) -- (send2);
+    \draw [arrow] (send2) -- (wait2);
+    \draw [arrow] (wait2) -- (review);
+    \draw [arrow] (review) -- (send3);
+    \draw [arrow] (send3) -- (wait3);
+    \draw [arrow] (wait3) -- (end);
+\end{tikzpicture}
+\caption{Flowchart quy trình chấm bài (Teacher)}
+\end{figure}
+
+\subsection{Sequence Diagram - Làm Bài Tập}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.75, transform shape]
+    % Lifelines
+    \node[client] (student) at (0,0) {Student};
+    \node[server] (server) at (6,0) {Server};
+    \node[client] (teacher) at (12,0) {Teacher};
+
+    \draw[dashed] (0,-0.5) -- (0,-16);
+    \draw[dashed] (6,-0.5) -- (6,-16);
+    \draw[dashed] (12,-0.5) -- (12,-16);
+
+    % Student gets exercise
+    \draw[->, thick, clientcolor] (0,-1.5) -- node[above, font=\scriptsize] {GET\_EXERCISE\_LIST\_REQUEST} (6,-1.5);
+    \draw[<-, thick, servercolor] (0,-2.5) -- node[above, font=\scriptsize] {GET\_EXERCISE\_LIST\_RESPONSE} (6,-2.5);
+
+    \draw[->, thick, clientcolor] (0,-3.5) -- node[above, font=\scriptsize] {GET\_EXERCISE\_REQUEST} (6,-3.5);
+    \draw[<-, thick, servercolor] (0,-4.5) -- node[above, font=\scriptsize] {GET\_EXERCISE\_RESPONSE} (6,-4.5);
+
+    % Student saves draft
+    \draw[dashed] (-1,-5.5) rectangle (7,-7.5);
+    \node[font=\scriptsize] at (0,-5.8) {opt [Lưu nháp]};
+    \draw[->, thick, clientcolor] (0,-6.5) -- node[above, font=\scriptsize] {SAVE\_DRAFT\_REQUEST} (6,-6.5);
+    \draw[<-, thick, servercolor] (0,-7.2) -- node[above, font=\scriptsize] {SAVE\_DRAFT\_RESPONSE} (6,-7.2);
+
+    % Student submits
+    \draw[->, thick, clientcolor] (0,-8.5) -- node[above, font=\scriptsize] {SUBMIT\_EXERCISE\_REQUEST} (6,-8.5);
+    \draw[<-, thick, servercolor] (0,-9.5) -- node[above, font=\scriptsize] {SUBMIT\_EXERCISE\_RESPONSE} (6,-9.5);
+
+    % Notification to teacher
+    \draw[->, thick, notifycolor] (6,-10) -- node[above, font=\scriptsize] {NEW\_SUBMISSION\_NOTIFICATION} (12,-10);
+
+    % Teacher reviews
+    \draw[->, thick, clientcolor] (12,-11) -- node[above, font=\scriptsize] {GET\_SUBMISSION\_DETAIL\_REQUEST} (6,-11);
+    \draw[<-, thick, servercolor] (12,-12) -- node[above, font=\scriptsize] {GET\_SUBMISSION\_DETAIL\_RESPONSE} (6,-12);
+
+    \draw[->, thick, clientcolor] (12,-13) -- node[above, font=\scriptsize] {REVIEW\_EXERCISE\_REQUEST} (6,-13);
+    \draw[<-, thick, servercolor] (12,-14) -- node[above, font=\scriptsize] {REVIEW\_EXERCISE\_RESPONSE} (6,-14);
+
+    % Notification to student
+    \draw[->, thick, notifycolor] (6,-15) -- node[above, font=\scriptsize] {EXERCISE\_FEEDBACK\_NOTIFICATION} (0,-15);
+\end{tikzpicture}
+\caption{Sequence diagram làm bài tập và chấm bài}
+\end{figure}
+
+\subsection{Danh Sách Bản Tin}
+
+\begin{longtable}{|p{5.5cm}|p{2.5cm}|p{5.5cm}|}
+\hline
+\textbf{Message Type} & \textbf{Hướng} & \textbf{Mô tả} \\
+\hline
+\endhead
+\multicolumn{3}{|c|}{\textbf{Student Workflow}} \\
+\hline
+GET\_EXERCISE\_LIST\_REQUEST & C $\rightarrow$ S & Lấy danh sách bài tập \\
+\hline
+GET\_EXERCISE\_LIST\_RESPONSE & S $\rightarrow$ C & Danh sách bài tập \\
+\hline
+GET\_EXERCISE\_REQUEST & C $\rightarrow$ S & Lấy chi tiết bài tập \\
+\hline
+GET\_EXERCISE\_RESPONSE & S $\rightarrow$ C & Nội dung bài tập \\
+\hline
+SAVE\_DRAFT\_REQUEST & C $\rightarrow$ S & Lưu bản nháp \\
+\hline
+SAVE\_DRAFT\_RESPONSE & S $\rightarrow$ C & Xác nhận lưu \\
+\hline
+SUBMIT\_EXERCISE\_REQUEST & C $\rightarrow$ S & Nộp bài tập \\
+\hline
+SUBMIT\_EXERCISE\_RESPONSE & S $\rightarrow$ C & Xác nhận nộp \\
+\hline
+GET\_USER\_SUBMISSIONS\_REQUEST & C $\rightarrow$ S & Xem các bài đã nộp \\
+\hline
+GET\_USER\_SUBMISSIONS\_RESPONSE & S $\rightarrow$ C & Danh sách bài nộp \\
+\hline
+GET\_FEEDBACK\_REQUEST & C $\rightarrow$ S & Xem phản hồi \\
+\hline
+GET\_FEEDBACK\_RESPONSE & S $\rightarrow$ C & Chi tiết phản hồi \\
+\hline
+GET\_MY\_DRAFTS\_REQUEST & C $\rightarrow$ S & Xem bản nháp \\
+\hline
+GET\_MY\_DRAFTS\_RESPONSE & S $\rightarrow$ C & Danh sách bản nháp \\
+\hline
+\multicolumn{3}{|c|}{\textbf{Teacher Workflow}} \\
+\hline
+GET\_PENDING\_REVIEWS\_REQUEST & C $\rightarrow$ S & Lấy bài chờ chấm \\
+\hline
+GET\_PENDING\_REVIEWS\_RESPONSE & S $\rightarrow$ C & Danh sách bài chờ \\
+\hline
+GET\_SUBMISSION\_DETAIL\_REQUEST & C $\rightarrow$ S & Chi tiết bài nộp \\
+\hline
+GET\_SUBMISSION\_DETAIL\_RESPONSE & S $\rightarrow$ C & Nội dung bài nộp \\
+\hline
+REVIEW\_EXERCISE\_REQUEST & C $\rightarrow$ S & Chấm điểm + phản hồi \\
+\hline
+REVIEW\_EXERCISE\_RESPONSE & S $\rightarrow$ C & Xác nhận chấm \\
+\hline
+GET\_REVIEW\_STATISTICS\_REQUEST & C $\rightarrow$ S & Thống kê chấm bài \\
+\hline
+GET\_REVIEW\_STATISTICS\_RESPONSE & S $\rightarrow$ C & Dữ liệu thống kê \\
+\hline
+\multicolumn{3}{|c|}{\textbf{Notifications}} \\
+\hline
+NEW\_SUBMISSION\_NOTIFICATION & S $\rightarrow$ C & Thông báo bài mới \\
+\hline
+EXERCISE\_FEEDBACK\_NOTIFICATION & S $\rightarrow$ C & Thông báo có phản hồi \\
+\hline
+\caption{Danh sách bản tin Exercise}
+\end{longtable}
+
+\subsection{Chi Tiết Bản Tin}
+
+\subsubsection{GET\_EXERCISE\_LIST\_REQUEST}
+
+\begin{lstlisting}[caption={GET\_EXERCISE\_LIST\_REQUEST}]
+{
+    "messageType": "GET_EXERCISE_LIST_REQUEST",
+    "sessionToken": "token_xyz789",
+    "payload": {
+        "exerciseType": "writing",
+        "level": "beginner"
+    }
+}
+\end{lstlisting}
+
+\subsubsection{SUBMIT\_EXERCISE\_REQUEST}
+
+\begin{lstlisting}[caption={SUBMIT\_EXERCISE\_REQUEST}]
+{
+    "messageType": "SUBMIT_EXERCISE_REQUEST",
+    "sessionToken": "token_xyz789",
+    "payload": {
+        "exerciseId": "ex_001",
+        "exerciseType": "writing",
+        "content": "I wake up at 6 AM every day...",
+        "audioUrl": ""
+    }
+}
+\end{lstlisting}
+
+\subsubsection{REVIEW\_EXERCISE\_REQUEST}
+
+\begin{lstlisting}[caption={REVIEW\_EXERCISE\_REQUEST (Teacher)}]
+{
+    "messageType": "REVIEW_EXERCISE_REQUEST",
+    "sessionToken": "teacher_token",
+    "payload": {
+        "submissionId": "sub_001",
+        "score": 85,
+        "feedback": "Good work! Try to use more varied vocabulary."
+    }
+}
+\end{lstlisting}
+
+\subsubsection{EXERCISE\_FEEDBACK\_NOTIFICATION}
+
+\begin{lstlisting}[caption={EXERCISE\_FEEDBACK\_NOTIFICATION}]
+{
+    "messageType": "EXERCISE_FEEDBACK_NOTIFICATION",
+    "timestamp": 1704067200000,
+    "payload": {
+        "exerciseId": "ex_001",
+        "exerciseTitle": "My Daily Routine",
+        "score": 85,
+        "feedback": "Good work!",
+        "reviewedBy": "Teacher Sarah"
+    }
+}
+\end{lstlisting}
+
+\newpage
+%====================================================================
+\section{Chat với User Khác}
+%====================================================================
+
+\subsection{Mô Tả Chức Năng}
+
+Chức năng chat cho phép:
+\begin{itemize}
+    \item Xem danh sách người dùng (online/offline)
+    \item Gửi tin nhắn cho người dùng khác
+    \item Nhận tin nhắn real-time
+    \item Xem lịch sử chat
+    \item Đánh dấu tin nhắn đã đọc
+\end{itemize}
+
+\subsection{Quy Trình Chat}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.3cm, scale=0.8, transform shape]
+    % Nodes
+    \node (start) [startstop] {Chọn "Chat"};
+    \node (send1) [process, below of=start] {GET\_CONTACT\_LIST\_REQUEST};
+    \node (wait1) [process, below of=send1] {GET\_CONTACT\_LIST\_RESPONSE};
+    \node (display) [io, below of=wait1] {Hiển thị danh sách user};
+    \node (select) [process, below of=display] {Chọn user để chat};
+    \node (send2) [process, below of=select] {GET\_CHAT\_HISTORY\_REQUEST};
+    \node (wait2) [process, below of=send2] {GET\_CHAT\_HISTORY\_RESPONSE};
+    \node (showChat) [io, below of=wait2] {Hiển thị lịch sử};
+    \node (loop) [decision, below of=showChat, yshift=-0.5cm] {Tiếp tục?};
+    \node (input) [io, below of=loop, yshift=-0.5cm, xshift=-3cm] {Nhập tin nhắn};
+    \node (send3) [process, below of=input] {SEND\_MESSAGE\_REQUEST};
+    \node (end) [startstop, below of=loop, yshift=-3cm] {Kết thúc};
+
+    % Arrows
+    \draw [arrow] (start) -- (send1);
+    \draw [arrow] (send1) -- (wait1);
+    \draw [arrow] (wait1) -- (display);
+    \draw [arrow] (display) -- (select);
+    \draw [arrow] (select) -- (send2);
+    \draw [arrow] (send2) -- (wait2);
+    \draw [arrow] (wait2) -- (showChat);
+    \draw [arrow] (showChat) -- (loop);
+    \draw [arrow] (loop) -| node[above left, pos=0.3] {Có} (input);
+    \draw [arrow] (input) -- (send3);
+    \draw [arrow] (send3) |- (showChat);
+    \draw [arrow] (loop) -- node[right] {Không} (end);
+\end{tikzpicture}
+\caption{Flowchart quy trình chat}
+\end{figure}
+
+\subsection{Sequence Diagram - Gửi/Nhận Tin Nhắn}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.85, transform shape]
+    % Lifelines
+    \node[client] (userA) at (0,0) {User A};
+    \node[server] (server) at (6,0) {Server};
+    \node[client] (userB) at (12,0) {User B};
+
+    \draw[dashed] (0,-0.5) -- (0,-14);
+    \draw[dashed] (6,-0.5) -- (6,-14);
+    \draw[dashed] (12,-0.5) -- (12,-14);
+
+    % Get contact list
+    \draw[->, thick, clientcolor] (0,-1.5) -- node[above, font=\scriptsize] {GET\_CONTACT\_LIST\_REQUEST} (6,-1.5);
+    \draw[<-, thick, servercolor] (0,-2.5) -- node[above, font=\scriptsize] {GET\_CONTACT\_LIST\_RESPONSE} (6,-2.5);
+
+    % Get chat history
+    \draw[->, thick, clientcolor] (0,-3.5) -- node[above, font=\scriptsize] {GET\_CHAT\_HISTORY\_REQUEST} (6,-3.5);
+    \draw[<-, thick, servercolor] (0,-4.5) -- node[above, font=\scriptsize] {GET\_CHAT\_HISTORY\_RESPONSE} (6,-4.5);
+
+    % Send message
+    \draw[->, thick, clientcolor] (0,-6) -- node[above, font=\scriptsize] {SEND\_MESSAGE\_REQUEST} (6,-6);
+
+    % Server processing
+    \fill[servercolor!30] (5.85,-6) rectangle (6.15,-7.5);
+    \node[font=\scriptsize, align=left, anchor=west] at (6.3,-6.75) {Lưu tin nhắn\\Tìm recipient};
+
+    \draw[<-, thick, servercolor] (0,-7.5) -- node[above, font=\scriptsize] {SEND\_MESSAGE\_RESPONSE} (6,-7.5);
+
+    % Notification to User B
+    \draw[->, thick, notifycolor] (6,-8.5) -- node[above, font=\scriptsize] {RECEIVE\_MESSAGE} (12,-8.5);
+
+    % User B replies
+    \draw[->, thick, clientcolor] (12,-10) -- node[above, font=\scriptsize] {SEND\_MESSAGE\_REQUEST} (6,-10);
+    \draw[<-, thick, servercolor] (12,-11) -- node[above, font=\scriptsize] {SEND\_MESSAGE\_RESPONSE} (6,-11);
+
+    % Notification to User A
+    \draw[->, thick, notifycolor] (6,-12) -- node[above, font=\scriptsize] {RECEIVE\_MESSAGE} (0,-12);
+
+    % Mark read
+    \draw[->, thick, clientcolor] (0,-13) -- node[above, font=\scriptsize] {MARK\_MESSAGES\_READ\_REQUEST} (6,-13);
+\end{tikzpicture}
+\caption{Sequence diagram chat giữa 2 user}
+\end{figure}
+
+\subsection{Danh Sách Bản Tin}
+
+\begin{longtable}{|p{5.5cm}|p{2.5cm}|p{5.5cm}|}
+\hline
+\textbf{Message Type} & \textbf{Hướng} & \textbf{Mô tả} \\
+\hline
+\endhead
+GET\_CONTACT\_LIST\_REQUEST & C $\rightarrow$ S & Lấy danh sách liên hệ \\
+\hline
+GET\_CONTACT\_LIST\_RESPONSE & S $\rightarrow$ C & Danh sách user + trạng thái \\
+\hline
+SEND\_MESSAGE\_REQUEST & C $\rightarrow$ S & Gửi tin nhắn \\
+\hline
+SEND\_MESSAGE\_RESPONSE & S $\rightarrow$ C & Xác nhận gửi \\
+\hline
+GET\_CHAT\_HISTORY\_REQUEST & C $\rightarrow$ S & Lấy lịch sử chat \\
+\hline
+GET\_CHAT\_HISTORY\_RESPONSE & S $\rightarrow$ C & Danh sách tin nhắn \\
+\hline
+MARK\_MESSAGES\_READ\_REQUEST & C $\rightarrow$ S & Đánh dấu đã đọc \\
+\hline
+MARK\_MESSAGES\_READ\_RESPONSE & S $\rightarrow$ C & Xác nhận \\
+\hline
+\multicolumn{3}{|c|}{\textbf{Notifications}} \\
+\hline
+RECEIVE\_MESSAGE & S $\rightarrow$ C & Tin nhắn mới (real-time) \\
+\hline
+UNREAD\_MESSAGES\_NOTIFICATION & S $\rightarrow$ C & Thông báo tin chưa đọc \\
+\hline
+\caption{Danh sách bản tin Chat}
+\end{longtable}
+
+\subsection{Chi Tiết Bản Tin}
+
+\subsubsection{GET\_CONTACT\_LIST\_REQUEST}
+
+\begin{lstlisting}[caption={GET\_CONTACT\_LIST\_REQUEST}]
+{
+    "messageType": "GET_CONTACT_LIST_REQUEST",
+    "sessionToken": "token_xyz789",
+    "payload": {}
+}
+\end{lstlisting}
+
+\subsubsection{GET\_CONTACT\_LIST\_RESPONSE}
+
+\begin{lstlisting}[caption={GET\_CONTACT\_LIST\_RESPONSE}]
+{
+    "messageType": "GET_CONTACT_LIST_RESPONSE",
+    "payload": {
+        "status": "success",
+        "data": {
+            "users": [
+                {
+                    "userId": "user_002",
+                    "fullname": "Teacher Sarah",
+                    "role": "teacher",
+                    "online": true
+                },
+                {
+                    "userId": "user_003",
+                    "fullname": "Student Bob",
+                    "role": "student",
+                    "online": false
+                }
+            ]
+        }
+    }
+}
+\end{lstlisting}
+
+\subsubsection{SEND\_MESSAGE\_REQUEST}
+
+\begin{lstlisting}[caption={SEND\_MESSAGE\_REQUEST}]
+{
+    "messageType": "SEND_MESSAGE_REQUEST",
+    "sessionToken": "token_xyz789",
+    "payload": {
+        "recipientId": "user_002",
+        "messageContent": "Hello teacher, I have a question."
+    }
+}
+\end{lstlisting}
+
+\subsubsection{SEND\_MESSAGE\_RESPONSE}
+
+\begin{lstlisting}[caption={SEND\_MESSAGE\_RESPONSE}]
+{
+    "messageType": "SEND_MESSAGE_RESPONSE",
+    "payload": {
+        "status": "success",
+        "data": {
+            "messageId": "chat_msg_001",
+            "sentAt": 1704067200000
+        }
+    }
+}
+\end{lstlisting}
+
+\subsubsection{RECEIVE\_MESSAGE (Notification)}
+
+\begin{lstlisting}[caption={RECEIVE\_MESSAGE}]
+{
+    "messageType": "RECEIVE_MESSAGE",
+    "timestamp": 1704067200000,
+    "payload": {
+        "senderId": "user_001",
+        "senderName": "Nguyen Van A",
+        "messageContent": "Hello teacher, I have a question.",
+        "sentAt": 1704067200000
+    }
+}
+\end{lstlisting}
+
+\subsubsection{GET\_CHAT\_HISTORY\_REQUEST}
+
+\begin{lstlisting}[caption={GET\_CHAT\_HISTORY\_REQUEST}]
+{
+    "messageType": "GET_CHAT_HISTORY_REQUEST",
+    "sessionToken": "token_xyz789",
+    "payload": {
+        "senderId": "user_002"
+    }
+}
+\end{lstlisting}
+
+\subsubsection{GET\_CHAT\_HISTORY\_RESPONSE}
+
+\begin{lstlisting}[caption={GET\_CHAT\_HISTORY\_RESPONSE}]
+{
+    "messageType": "GET_CHAT_HISTORY_RESPONSE",
+    "payload": {
+        "status": "success",
+        "data": {
+            "messages": [
+                {
+                    "messageId": "chat_001",
+                    "senderId": "user_001",
+                    "senderName": "Nguyen Van A",
+                    "content": "Hello teacher!",
+                    "timestamp": 1704060000000
+                },
+                {
+                    "messageId": "chat_002",
+                    "senderId": "user_002",
+                    "senderName": "Teacher Sarah",
+                    "content": "Hi! How can I help?",
+                    "timestamp": 1704060060000
+                }
+            ]
+        }
+    }
+}
+\end{lstlisting}
+
+\newpage
+%====================================================================
+\section{Chơi Game}
+%====================================================================
+
+\subsection{Mô Tả Chức Năng}
+
+Chức năng chơi game bao gồm các loại game:
+\begin{itemize}
+    \item \textbf{Word Match}: Ghép từ tiếng Anh - tiếng Việt
+    \item \textbf{Picture Match}: Ghép hình ảnh với từ vựng
+    \item \textbf{Sentence Match}: Ghép câu với nghĩa
+\end{itemize}
+
+\subsection{Quy Trình Chơi Game}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.3cm, scale=0.8, transform shape]
+    % Nodes
+    \node (start) [startstop] {Chọn "Chơi game"};
+    \node (send1) [process, below of=start] {GET\_GAME\_LIST\_REQUEST};
+    \node (wait1) [process, below of=send1] {GET\_GAME\_LIST\_RESPONSE};
+    \node (display) [io, below of=wait1] {Hiển thị danh sách game};
+    \node (select) [process, below of=display] {Chọn game};
+    \node (send2) [process, below of=select] {START\_GAME\_REQUEST};
+    \node (wait2) [process, below of=send2] {START\_GAME\_RESPONSE};
+    \node (play) [io, below of=wait2] {Chơi game};
+    \node (timer) [decision, below of=play, yshift=-0.5cm] {Hết giờ?};
+    \node (submit) [process, below of=timer, yshift=-0.5cm] {SUBMIT\_GAME\_RESULT\_REQUEST};
+    \node (wait3) [process, below of=submit] {SUBMIT\_GAME\_RESULT\_RESPONSE};
+    \node (result) [io, below of=wait3] {Hiển thị kết quả};
+    \node (again) [decision, below of=result, yshift=-0.5cm] {Chơi lại?};
+    \node (end) [startstop, right of=again, xshift=3cm] {Kết thúc};
+
+    % Arrows
+    \draw [arrow] (start) -- (send1);
+    \draw [arrow] (send1) -- (wait1);
+    \draw [arrow] (wait1) -- (display);
+    \draw [arrow] (display) -- (select);
+    \draw [arrow] (select) -- (send2);
+    \draw [arrow] (send2) -- (wait2);
+    \draw [arrow] (wait2) -- (play);
+    \draw [arrow] (play) -- (timer);
+    \draw [arrow] (timer) -- node[left] {Có/Xong} (submit);
+    \draw [arrow] (timer.east) -- ++(1,0) |- node[right, pos=0.25] {Không} (play.east);
+    \draw [arrow] (submit) -- (wait3);
+    \draw [arrow] (wait3) -- (result);
+    \draw [arrow] (result) -- (again);
+    \draw [arrow] (again) -- node[above] {Không} (end);
+    \draw [arrow] (again.west) -- ++(-1,0) |- node[left, pos=0.25] {Có} (select.west);
+\end{tikzpicture}
+\caption{Flowchart quy trình chơi game}
+\end{figure}
+
+\subsection{Sequence Diagram}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.85, transform shape]
+    % Lifelines
+    \node[client] (client) at (0,0) {Client};
+    \node[server] (server) at (8,0) {Server};
+
+    \draw[dashed] (0,-0.5) -- (0,-14);
+    \draw[dashed] (8,-0.5) -- (8,-14);
+
+    % Get game list
+    \draw[->, thick, clientcolor] (0,-1.5) -- node[above, font=\scriptsize] {GET\_GAME\_LIST\_REQUEST} (8,-1.5);
+    \draw[<-, thick, servercolor] (0,-2.5) -- node[above, font=\scriptsize] {GET\_GAME\_LIST\_RESPONSE} (8,-2.5);
+
+    % Start game
+    \draw[->, thick, clientcolor] (0,-4) -- node[above, font=\scriptsize] {START\_GAME\_REQUEST} (8,-4);
+
+    % Server prepares game
+    \fill[servercolor!30] (7.85,-4) rectangle (8.15,-5.5);
+    \node[font=\scriptsize, align=left, anchor=west] at (8.3,-4.75) {Tạo game session\\Shuffle pairs};
+
+    \draw[<-, thick, servercolor] (0,-6) -- node[above, font=\scriptsize] {START\_GAME\_RESPONSE} (8,-6);
+
+    % User plays
+    \draw[dashed] (-1,-7) rectangle (1,-9.5);
+    \node[font=\scriptsize] at (0,-7.3) {loop [Chơi game]};
+    \node[font=\scriptsize, align=center] at (0,-8.5) {Load hình ảnh\\User ghép cặp\\Đếm giờ};
+
+    % Submit result
+    \draw[->, thick, clientcolor] (0,-10.5) -- node[above, font=\scriptsize] {SUBMIT\_GAME\_RESULT\_REQUEST} (8,-10.5);
+
+    % Server calculates score
+    \fill[servercolor!30] (7.85,-10.5) rectangle (8.15,-12);
+    \node[font=\scriptsize, align=left, anchor=west] at (8.3,-11.25) {Tính điểm\\Lưu kết quả};
+
+    \draw[<-, thick, servercolor] (0,-12.5) -- node[above, font=\scriptsize] {SUBMIT\_GAME\_RESULT\_RESPONSE} (8,-12.5);
+\end{tikzpicture}
+\caption{Sequence diagram chơi game}
+\end{figure}
+
+\subsection{Danh Sách Bản Tin}
+
+\begin{longtable}{|p{5.5cm}|p{2.5cm}|p{5.5cm}|}
+\hline
+\textbf{Message Type} & \textbf{Hướng} & \textbf{Mô tả} \\
+\hline
+\endhead
+GET\_GAME\_LIST\_REQUEST & C $\rightarrow$ S & Lấy danh sách game \\
+\hline
+GET\_GAME\_LIST\_RESPONSE & S $\rightarrow$ C & Danh sách game có sẵn \\
+\hline
+START\_GAME\_REQUEST & C $\rightarrow$ S & Bắt đầu game \\
+\hline
+START\_GAME\_RESPONSE & S $\rightarrow$ C & Dữ liệu game (pairs) \\
+\hline
+SUBMIT\_GAME\_RESULT\_REQUEST & C $\rightarrow$ S & Nộp kết quả game \\
+\hline
+SUBMIT\_GAME\_RESULT\_RESPONSE & S $\rightarrow$ C & Điểm số và feedback \\
+\hline
+\multicolumn{3}{|c|}{\textbf{Admin (Quản lý game)}} \\
+\hline
+ADD\_GAME\_REQUEST & C $\rightarrow$ S & Thêm game mới \\
+\hline
+ADD\_GAME\_RESPONSE & S $\rightarrow$ C & Xác nhận thêm \\
+\hline
+UPDATE\_GAME\_REQUEST & C $\rightarrow$ S & Cập nhật game \\
+\hline
+UPDATE\_GAME\_RESPONSE & S $\rightarrow$ C & Xác nhận cập nhật \\
+\hline
+DELETE\_GAME\_REQUEST & C $\rightarrow$ S & Xóa game \\
+\hline
+DELETE\_GAME\_RESPONSE & S $\rightarrow$ C & Xác nhận xóa \\
+\hline
+GET\_ADMIN\_GAMES\_REQUEST & C $\rightarrow$ S & Lấy tất cả game (Admin) \\
+\hline
+GET\_ADMIN\_GAMES\_RESPONSE & S $\rightarrow$ C & Danh sách đầy đủ \\
+\hline
+\caption{Danh sách bản tin Game}
+\end{longtable}
+
+\subsection{Chi Tiết Bản Tin}
+
+\subsubsection{GET\_GAME\_LIST\_REQUEST}
+
+\begin{lstlisting}[caption={GET\_GAME\_LIST\_REQUEST}]
+{
+    "messageType": "GET_GAME_LIST_REQUEST",
+    "sessionToken": "token_xyz789",
+    "payload": {
+        "gameType": "all",
+        "level": "beginner"
+    }
+}
+\end{lstlisting}
+
+\subsubsection{GET\_GAME\_LIST\_RESPONSE}
+
+\begin{lstlisting}[caption={GET\_GAME\_LIST\_RESPONSE}]
+{
+    "messageType": "GET_GAME_LIST_RESPONSE",
+    "payload": {
+        "status": "success",
+        "data": {
+            "games": [
+                {
+                    "gameId": "game_001",
+                    "title": "Word Match",
+                    "gameType": "word_match",
+                    "level": "beginner",
+                    "description": "Match English-Vietnamese words"
+                },
+                {
+                    "gameId": "game_004",
+                    "title": "Fruit Pictures",
+                    "gameType": "picture_match",
+                    "level": "beginner",
+                    "description": "Match words with fruit images"
+                }
+            ]
+        }
+    }
+}
+\end{lstlisting}
+
+\subsubsection{START\_GAME\_REQUEST}
+
+\begin{lstlisting}[caption={START\_GAME\_REQUEST}]
+{
+    "messageType": "START_GAME_REQUEST",
+    "sessionToken": "token_xyz789",
+    "payload": {
+        "gameId": "game_004"
+    }
+}
+\end{lstlisting}
+
+\subsubsection{START\_GAME\_RESPONSE (Word Match)}
+
+\begin{lstlisting}[caption={START\_GAME\_RESPONSE - Word Match}]
+{
+    "messageType": "START_GAME_RESPONSE",
+    "payload": {
+        "status": "success",
+        "data": {
+            "gameSessionId": "gs_002",
+            "gameId": "game_001",
+            "gameType": "word_match",
+            "title": "Word Match",
+            "timeLimit": 180,
+            "pairs": [
+                {"left": "Hello", "right": "Xin chao"},
+                {"left": "Goodbye", "right": "Tam biet"},
+                {"left": "Thank you", "right": "Cam on"}
+            ]
+        }
+    }
+}
+\end{lstlisting}
+
+\subsubsection{START\_GAME\_RESPONSE (Picture Match)}
+
+\begin{lstlisting}[caption={START\_GAME\_RESPONSE - Picture Match}]
+{
+    "messageType": "START_GAME_RESPONSE",
+    "payload": {
+        "status": "success",
+        "data": {
+            "gameSessionId": "gs_001",
+            "gameId": "game_004",
+            "gameType": "picture_match",
+            "title": "Fruit Pictures",
+            "timeLimit": 120,
+            "maxScore": 100,
+            "pairs": [
+                {
+                    "word": "Apple",
+                    "imageUrl": "https://cdn-icons-png.flaticon.com/128/415/415682.png"
+                },
+                {
+                    "word": "Banana",
+                    "imageUrl": "https://cdn-icons-png.flaticon.com/128/3143/3143643.png"
+                },
+                {
+                    "word": "Orange",
+                    "imageUrl": "https://cdn-icons-png.flaticon.com/128/415/415733.png"
+                }
+            ]
+        }
+    }
+}
+\end{lstlisting}
+
+\subsubsection{SUBMIT\_GAME\_RESULT\_REQUEST}
+
+\begin{lstlisting}[caption={SUBMIT\_GAME\_RESULT\_REQUEST}]
+{
+    "messageType": "SUBMIT_GAME_RESULT_REQUEST",
+    "sessionToken": "token_xyz789",
+    "payload": {
+        "gameSessionId": "gs_001",
+        "gameId": "game_004",
+        "matches": [
+            {"word": "Apple", "imageUrl": "https://...415682.png"},
+            {"word": "Banana", "imageUrl": "https://...3143643.png"},
+            {"word": "Orange", "imageUrl": "https://...415733.png"}
+        ]
+    }
+}
+\end{lstlisting}
+
+\subsubsection{SUBMIT\_GAME\_RESULT\_RESPONSE}
+
+\begin{lstlisting}[caption={SUBMIT\_GAME\_RESULT\_RESPONSE}]
+{
+    "messageType": "SUBMIT_GAME_RESULT_RESPONSE",
+    "payload": {
+        "status": "success",
+        "data": {
+            "score": 100,
+            "maxScore": 100,
+            "correctMatches": 3,
+            "totalPairs": 3,
+            "timeUsed": 45,
+            "feedback": "Excellent! Perfect score!"
+        }
+    }
+}
+\end{lstlisting}
+
+\newpage
+%====================================================================
+\section{Voice Call (Gọi Thoại)}
+%====================================================================
+
+\subsection{Mô Tả Chức Năng}
+
+Chức năng gọi thoại cho phép:
+\begin{itemize}
+    \item Khởi tạo cuộc gọi đến user khác
+    \item Nhận thông báo cuộc gọi đến
+    \item Chấp nhận hoặc từ chối cuộc gọi
+    \item Kết thúc cuộc gọi
+\end{itemize}
+
+\subsection{Sequence Diagram - Voice Call}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.75, transform shape]
+    % Lifelines
+    \node[client] (caller) at (0,0) {Caller};
+    \node[server] (server) at (6,0) {Server};
+    \node[client] (receiver) at (12,0) {Receiver};
+
+    \draw[dashed] (0,-0.5) -- (0,-16);
+    \draw[dashed] (6,-0.5) -- (6,-16);
+    \draw[dashed] (12,-0.5) -- (12,-16);
+
+    % Initiate call
+    \draw[->, thick, clientcolor] (0,-1.5) -- node[above, font=\scriptsize] {VOICE\_CALL\_INITIATE\_REQUEST} (6,-1.5);
+    \draw[<-, thick, servercolor] (0,-2.5) -- node[above, font=\scriptsize] {VOICE\_CALL\_INITIATE\_RESPONSE} (6,-2.5);
+
+    % Notification to receiver
+    \draw[->, thick, notifycolor] (6,-3.5) -- node[above, font=\scriptsize] {VOICE\_CALL\_INCOMING} (12,-3.5);
+
+    % Alternative: Accept or Reject
+    \draw[dashed] (-1,-4.5) rectangle (13,-9);
+    \node[font=\scriptsize] at (1,-4.8) {alt [Accept]};
+
+    \draw[->, thick, clientcolor] (12,-5.5) -- node[above, font=\scriptsize] {VOICE\_CALL\_ACCEPT\_REQUEST} (6,-5.5);
+    \draw[<-, thick, servercolor] (12,-6.5) -- node[above, font=\scriptsize] {VOICE\_CALL\_ACCEPT\_RESPONSE} (6,-6.5);
+    \draw[->, thick, notifycolor] (6,-7) -- node[above, font=\scriptsize] {VOICE\_CALL\_ACCEPTED} (0,-7);
+
+    \draw[dashed] (-0.5,-7.5) -- (12.5,-7.5);
+    \node[font=\scriptsize] at (1,-7.8) {[Reject]};
+    \draw[->, thick, red] (12,-8.5) -- node[above, font=\scriptsize] {VOICE\_CALL\_REJECT\_REQUEST} (6,-8.5);
+
+    % Call in progress
+    \draw[dashed] (-1,-10) rectangle (13,-12);
+    \node[font=\scriptsize] at (0,-10.3) {loop [In Call]};
+    \node[font=\scriptsize, align=center] at (6,-11) {Cuộc gọi đang diễn ra\\(Audio streaming)};
+
+    % End call
+    \draw[->, thick, clientcolor] (0,-13) -- node[above, font=\scriptsize] {VOICE\_CALL\_END\_REQUEST} (6,-13);
+    \draw[<-, thick, servercolor] (0,-14) -- node[above, font=\scriptsize] {VOICE\_CALL\_END\_RESPONSE} (6,-14);
+    \draw[->, thick, notifycolor] (6,-15) -- node[above, font=\scriptsize] {VOICE\_CALL\_ENDED} (12,-15);
+\end{tikzpicture}
+\caption{Sequence diagram voice call}
+\end{figure}
+
+\subsection{Danh Sách Bản Tin}
+
+\begin{longtable}{|p{5.5cm}|p{2.5cm}|p{5.5cm}|}
+\hline
+\textbf{Message Type} & \textbf{Hướng} & \textbf{Mô tả} \\
+\hline
+\endhead
+VOICE\_CALL\_INITIATE\_REQUEST & C $\rightarrow$ S & Khởi tạo cuộc gọi \\
+\hline
+VOICE\_CALL\_INITIATE\_RESPONSE & S $\rightarrow$ C & Kết quả khởi tạo \\
+\hline
+VOICE\_CALL\_ACCEPT\_REQUEST & C $\rightarrow$ S & Chấp nhận cuộc gọi \\
+\hline
+VOICE\_CALL\_ACCEPT\_RESPONSE & S $\rightarrow$ C & Xác nhận chấp nhận \\
+\hline
+VOICE\_CALL\_REJECT\_REQUEST & C $\rightarrow$ S & Từ chối cuộc gọi \\
+\hline
+VOICE\_CALL\_REJECT\_RESPONSE & S $\rightarrow$ C & Xác nhận từ chối \\
+\hline
+VOICE\_CALL\_END\_REQUEST & C $\rightarrow$ S & Kết thúc cuộc gọi \\
+\hline
+VOICE\_CALL\_END\_RESPONSE & S $\rightarrow$ C & Xác nhận kết thúc \\
+\hline
+VOICE\_CALL\_GET\_STATUS\_REQUEST & C $\rightarrow$ S & Lấy trạng thái cuộc gọi \\
+\hline
+VOICE\_CALL\_GET\_STATUS\_RESPONSE & S $\rightarrow$ C & Trạng thái hiện tại \\
+\hline
+\multicolumn{3}{|c|}{\textbf{Notifications}} \\
+\hline
+VOICE\_CALL\_INCOMING & S $\rightarrow$ C & Báo có cuộc gọi đến \\
+\hline
+VOICE\_CALL\_ACCEPTED & S $\rightarrow$ C & Cuộc gọi được chấp nhận \\
+\hline
+VOICE\_CALL\_REJECTED & S $\rightarrow$ C & Cuộc gọi bị từ chối \\
+\hline
+VOICE\_CALL\_ENDED & S $\rightarrow$ C & Cuộc gọi kết thúc \\
+\hline
+\caption{Danh sách bản tin Voice Call}
+\end{longtable}
+
+\newpage
+%====================================================================
+\section{Tổng Hợp Bản Tin}
+%====================================================================
+
+\subsection{Bảng Tổng Hợp Tất Cả Bản Tin}
+
+\begin{longtable}{|p{1cm}|p{5cm}|p{2cm}|p{5.5cm}|}
+\hline
+\textbf{STT} & \textbf{Message Type} & \textbf{Hướng} & \textbf{Chức năng} \\
+\hline
+\endhead
+\multicolumn{4}{|c|}{\textbf{AUTHENTICATION (6 bản tin)}} \\
+\hline
+1 & REGISTER\_REQUEST & C $\rightarrow$ S & Đăng ký \\
+2 & REGISTER\_RESPONSE & S $\rightarrow$ C & Đăng ký \\
+3 & LOGIN\_REQUEST & C $\rightarrow$ S & Đăng nhập \\
+4 & LOGIN\_RESPONSE & S $\rightarrow$ C & Đăng nhập \\
+5 & SET\_LEVEL\_REQUEST & C $\rightarrow$ S & Đăng nhập \\
+6 & SET\_LEVEL\_RESPONSE & S $\rightarrow$ C & Đăng nhập \\
+\hline
+\multicolumn{4}{|c|}{\textbf{LESSON (4 bản tin)}} \\
+\hline
+7 & GET\_LESSONS\_REQUEST & C $\rightarrow$ S & Học bài \\
+8 & GET\_LESSONS\_RESPONSE & S $\rightarrow$ C & Học bài \\
+9 & GET\_LESSON\_DETAIL\_REQUEST & C $\rightarrow$ S & Học bài \\
+10 & GET\_LESSON\_DETAIL\_RESPONSE & S $\rightarrow$ C & Học bài \\
+\hline
+\multicolumn{4}{|c|}{\textbf{TEST (4 bản tin)}} \\
+\hline
+11 & GET\_TEST\_REQUEST & C $\rightarrow$ S & Làm bài kiểm tra \\
+12 & GET\_TEST\_RESPONSE & S $\rightarrow$ C & Làm bài kiểm tra \\
+13 & SUBMIT\_TEST\_REQUEST & C $\rightarrow$ S & Làm bài kiểm tra \\
+14 & SUBMIT\_TEST\_RESPONSE & S $\rightarrow$ C & Làm bài kiểm tra \\
+\hline
+\multicolumn{4}{|c|}{\textbf{EXERCISE (24 bản tin)}} \\
+\hline
+15 & GET\_EXERCISE\_LIST\_REQUEST & C $\rightarrow$ S & Làm bài tập \\
+16 & GET\_EXERCISE\_LIST\_RESPONSE & S $\rightarrow$ C & Làm bài tập \\
+17 & GET\_EXERCISE\_REQUEST & C $\rightarrow$ S & Làm bài tập \\
+18 & GET\_EXERCISE\_RESPONSE & S $\rightarrow$ C & Làm bài tập \\
+19 & SAVE\_DRAFT\_REQUEST & C $\rightarrow$ S & Làm bài tập \\
+20 & SAVE\_DRAFT\_RESPONSE & S $\rightarrow$ C & Làm bài tập \\
+21 & SUBMIT\_EXERCISE\_REQUEST & C $\rightarrow$ S & Làm bài tập \\
+22 & SUBMIT\_EXERCISE\_RESPONSE & S $\rightarrow$ C & Làm bài tập \\
+23 & GET\_USER\_SUBMISSIONS\_REQUEST & C $\rightarrow$ S & Làm bài tập \\
+24 & GET\_USER\_SUBMISSIONS\_RESPONSE & S $\rightarrow$ C & Làm bài tập \\
+25 & GET\_FEEDBACK\_REQUEST & C $\rightarrow$ S & Làm bài tập \\
+26 & GET\_FEEDBACK\_RESPONSE & S $\rightarrow$ C & Làm bài tập \\
+27 & GET\_MY\_DRAFTS\_REQUEST & C $\rightarrow$ S & Làm bài tập \\
+28 & GET\_MY\_DRAFTS\_RESPONSE & S $\rightarrow$ C & Làm bài tập \\
+29 & GET\_PENDING\_REVIEWS\_REQUEST & C $\rightarrow$ S & Chấm bài (Teacher) \\
+30 & GET\_PENDING\_REVIEWS\_RESPONSE & S $\rightarrow$ C & Chấm bài (Teacher) \\
+31 & GET\_SUBMISSION\_DETAIL\_REQUEST & C $\rightarrow$ S & Chấm bài (Teacher) \\
+32 & GET\_SUBMISSION\_DETAIL\_RESPONSE & S $\rightarrow$ C & Chấm bài (Teacher) \\
+33 & REVIEW\_EXERCISE\_REQUEST & C $\rightarrow$ S & Chấm bài (Teacher) \\
+34 & REVIEW\_EXERCISE\_RESPONSE & S $\rightarrow$ C & Chấm bài (Teacher) \\
+35 & GET\_REVIEW\_STATISTICS\_REQUEST & C $\rightarrow$ S & Chấm bài (Teacher) \\
+36 & GET\_REVIEW\_STATISTICS\_RESPONSE & S $\rightarrow$ C & Chấm bài (Teacher) \\
+37 & NEW\_SUBMISSION\_NOTIFICATION & S $\rightarrow$ C & Thông báo \\
+38 & EXERCISE\_FEEDBACK\_NOTIFICATION & S $\rightarrow$ C & Thông báo \\
+\hline
+\multicolumn{4}{|c|}{\textbf{CHAT (12 bản tin)}} \\
+\hline
+39 & GET\_CONTACT\_LIST\_REQUEST & C $\rightarrow$ S & Chat \\
+40 & GET\_CONTACT\_LIST\_RESPONSE & S $\rightarrow$ C & Chat \\
+41 & SEND\_MESSAGE\_REQUEST & C $\rightarrow$ S & Chat \\
+42 & SEND\_MESSAGE\_RESPONSE & S $\rightarrow$ C & Chat \\
+43 & GET\_CHAT\_HISTORY\_REQUEST & C $\rightarrow$ S & Chat \\
+44 & GET\_CHAT\_HISTORY\_RESPONSE & S $\rightarrow$ C & Chat \\
+45 & MARK\_MESSAGES\_READ\_REQUEST & C $\rightarrow$ S & Chat \\
+46 & MARK\_MESSAGES\_READ\_RESPONSE & S $\rightarrow$ C & Chat \\
+47 & RECEIVE\_MESSAGE & S $\rightarrow$ C & Chat (Notification) \\
+48 & UNREAD\_MESSAGES\_NOTIFICATION & S $\rightarrow$ C & Chat (Notification) \\
+\hline
+\multicolumn{4}{|c|}{\textbf{GAME (14 bản tin)}} \\
+\hline
+49 & GET\_GAME\_LIST\_REQUEST & C $\rightarrow$ S & Chơi game \\
+50 & GET\_GAME\_LIST\_RESPONSE & S $\rightarrow$ C & Chơi game \\
+51 & START\_GAME\_REQUEST & C $\rightarrow$ S & Chơi game \\
+52 & START\_GAME\_RESPONSE & S $\rightarrow$ C & Chơi game \\
+53 & SUBMIT\_GAME\_RESULT\_REQUEST & C $\rightarrow$ S & Chơi game \\
+54 & SUBMIT\_GAME\_RESULT\_RESPONSE & S $\rightarrow$ C & Chơi game \\
+55 & ADD\_GAME\_REQUEST & C $\rightarrow$ S & Quản lý game (Admin) \\
+56 & ADD\_GAME\_RESPONSE & S $\rightarrow$ C & Quản lý game (Admin) \\
+57 & UPDATE\_GAME\_REQUEST & C $\rightarrow$ S & Quản lý game (Admin) \\
+58 & UPDATE\_GAME\_RESPONSE & S $\rightarrow$ C & Quản lý game (Admin) \\
+59 & DELETE\_GAME\_REQUEST & C $\rightarrow$ S & Quản lý game (Admin) \\
+60 & DELETE\_GAME\_RESPONSE & S $\rightarrow$ C & Quản lý game (Admin) \\
+61 & GET\_ADMIN\_GAMES\_REQUEST & C $\rightarrow$ S & Quản lý game (Admin) \\
+62 & GET\_ADMIN\_GAMES\_RESPONSE & S $\rightarrow$ C & Quản lý game (Admin) \\
+\hline
+\multicolumn{4}{|c|}{\textbf{VOICE CALL (14 bản tin)}} \\
+\hline
+63 & VOICE\_CALL\_INITIATE\_REQUEST & C $\rightarrow$ S & Gọi thoại \\
+64 & VOICE\_CALL\_INITIATE\_RESPONSE & S $\rightarrow$ C & Gọi thoại \\
+65 & VOICE\_CALL\_ACCEPT\_REQUEST & C $\rightarrow$ S & Gọi thoại \\
+66 & VOICE\_CALL\_ACCEPT\_RESPONSE & S $\rightarrow$ C & Gọi thoại \\
+67 & VOICE\_CALL\_REJECT\_REQUEST & C $\rightarrow$ S & Gọi thoại \\
+68 & VOICE\_CALL\_REJECT\_RESPONSE & S $\rightarrow$ C & Gọi thoại \\
+69 & VOICE\_CALL\_END\_REQUEST & C $\rightarrow$ S & Gọi thoại \\
+70 & VOICE\_CALL\_END\_RESPONSE & S $\rightarrow$ C & Gọi thoại \\
+71 & VOICE\_CALL\_GET\_STATUS\_REQUEST & C $\rightarrow$ S & Gọi thoại \\
+72 & VOICE\_CALL\_GET\_STATUS\_RESPONSE & S $\rightarrow$ C & Gọi thoại \\
+73 & VOICE\_CALL\_INCOMING & S $\rightarrow$ C & Gọi thoại (Notification) \\
+74 & VOICE\_CALL\_ACCEPTED & S $\rightarrow$ C & Gọi thoại (Notification) \\
+75 & VOICE\_CALL\_REJECTED & S $\rightarrow$ C & Gọi thoại (Notification) \\
+76 & VOICE\_CALL\_ENDED & S $\rightarrow$ C & Gọi thoại (Notification) \\
+\hline
+\multicolumn{4}{|c|}{\textbf{ERROR (1 bản tin)}} \\
+\hline
+77 & ERROR\_RESPONSE & S $\rightarrow$ C & Xử lý lỗi \\
+\hline
+\caption{Bảng tổng hợp tất cả 77 bản tin}
+\end{longtable}
+
+\subsection{Thống Kê Theo Chức Năng}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Chức năng} & \textbf{Request} & \textbf{Response} & \textbf{Notification} & \textbf{Tổng} \\
+\hline
+Authentication & 3 & 3 & 0 & 6 \\
+Lesson & 2 & 2 & 0 & 4 \\
+Test & 2 & 2 & 0 & 4 \\
+Exercise & 11 & 11 & 2 & 24 \\
+Chat & 4 & 4 & 2 & 10 \\
+Game & 7 & 7 & 0 & 14 \\
+Voice Call & 5 & 5 & 4 & 14 \\
+Error & 0 & 1 & 0 & 1 \\
+\hline
+\textbf{Tổng cộng} & \textbf{34} & \textbf{35} & \textbf{8} & \textbf{77} \\
+\hline
+\end{tabular}
+\caption{Thống kê số lượng bản tin theo chức năng}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+    % Bar chart
+    \begin{scope}[xshift=0cm]
+        \draw[->] (0,0) -- (9,0) node[right] {Chức năng};
+        \draw[->] (0,0) -- (0,5) node[above] {Số bản tin};
+
+        % Bars
+        \fill[clientcolor!70] (0.5,0) rectangle (1.2,1.2);
+        \node[font=\tiny] at (0.85,-0.3) {Auth};
+        \node[font=\tiny] at (0.85,1.4) {6};
+
+        \fill[servercolor!70] (1.5,0) rectangle (2.2,0.8);
+        \node[font=\tiny] at (1.85,-0.3) {Lesson};
+        \node[font=\tiny] at (1.85,1) {4};
+
+        \fill[msgcolor!70] (2.5,0) rectangle (3.2,0.8);
+        \node[font=\tiny] at (2.85,-0.3) {Test};
+        \node[font=\tiny] at (2.85,1) {4};
+
+        \fill[notifycolor!70] (3.5,0) rectangle (4.2,4.8);
+        \node[font=\tiny] at (3.85,-0.3) {Exercise};
+        \node[font=\tiny] at (3.85,5) {24};
+
+        \fill[red!50] (4.5,0) rectangle (5.2,2);
+        \node[font=\tiny] at (4.85,-0.3) {Chat};
+        \node[font=\tiny] at (4.85,2.2) {10};
+
+        \fill[blue!50] (5.5,0) rectangle (6.2,2.8);
+        \node[font=\tiny] at (5.85,-0.3) {Game};
+        \node[font=\tiny] at (5.85,3) {14};
+
+        \fill[orange!50] (6.5,0) rectangle (7.2,2.8);
+        \node[font=\tiny] at (6.85,-0.3) {Voice};
+        \node[font=\tiny] at (6.85,3) {14};
+
+        % Y-axis labels
+        \foreach \y in {1,2,3,4,5} {
+            \draw (-0.1,\y) -- (0.1,\y);
+            \node[left, font=\tiny] at (-0.1,\y) {\pgfmathparse{int(\y*5)}\pgfmathresult};
+        }
+    \end{scope}
+\end{tikzpicture}
+\caption{Biểu đồ số lượng bản tin theo chức năng}
+\end{figure}
+
+\newpage
+%====================================================================
+\section*{Phụ Lục: Mã Lỗi}
+%====================================================================
+\addcontentsline{toc}{section}{Phụ Lục: Mã Lỗi}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|p{7cm}|}
+\hline
+\textbf{Error Code} & \textbf{HTTP tương đương} & \textbf{Mô tả} \\
+\hline
+AUTH\_001 & 401 & Invalid credentials (sai email/password) \\
+AUTH\_002 & 401 & Session expired (token hết hạn) \\
+AUTH\_003 & 403 & Permission denied (không có quyền) \\
+DATA\_001 & 404 & Resource not found (không tìm thấy) \\
+DATA\_002 & 400 & Invalid data format (dữ liệu sai định dạng) \\
+DATA\_003 & 409 & Duplicate entry (dữ liệu trùng lặp) \\
+SYS\_001 & 500 & Internal server error (lỗi server) \\
+SYS\_002 & 503 & Service unavailable (dịch vụ không khả dụng) \\
+\hline
+\end{tabular}
+\caption{Bảng mã lỗi}
+\end{table}
+
+\begin{lstlisting}[caption={ERROR\_RESPONSE format}]
+{
+    "messageType": "ERROR_RESPONSE",
+    "timestamp": 1704067200000,
+    "payload": {
+        "status": "error",
+        "errorCode": "AUTH_001",
+        "message": "Invalid email or password"
+    }
+}
+\end{lstlisting}
+
+\vspace{2cm}
+\begin{center}
+\rule{0.5\textwidth}{0.4pt}
+
+\textit{Tài liệu quy trình và bản tin giao thức}
+
+\textit{English Learning Application}
+
+\textit{\today}
+\end{center}
+
+\end{document}
