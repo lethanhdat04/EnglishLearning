@@ -3484,8 +3484,25 @@ static void on_login_clicked(GtkWidget *widget, gpointer data) {
 }
 
 int main(int argc, char *argv[]) {
-  if (!connectToServer("127.0.0.1", 8888))
+  // Cho phép truyền IP server qua command line: ./gui_main <server_ip>
+  const char* serverIP = "127.0.0.1";  // Default: localhost
+  int serverPort = 8888;
+
+  if (argc >= 2) {
+    serverIP = argv[1];  // IP từ command line
+  }
+  if (argc >= 3) {
+    serverPort = atoi(argv[2]);  // Port từ command line
+  }
+
+  std::cout << "[INFO] Connecting to server: " << serverIP << ":" << serverPort << std::endl;
+
+  if (!connectToServer(serverIP, serverPort)) {
+    std::cerr << "[ERROR] Cannot connect to server " << serverIP << ":" << serverPort << std::endl;
+    std::cerr << "Usage: " << argv[0] << " [server_ip] [port]" << std::endl;
+    std::cerr << "Example: " << argv[0] << " 192.168.1.100 8888" << std::endl;
     return 1;
+  }
   std::thread recvThread(receiveThreadFunc);
   recvThread.detach();
 
