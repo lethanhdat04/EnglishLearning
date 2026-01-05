@@ -3379,14 +3379,7 @@ static void on_add_game_submit(GtkWidget *widget, gpointer dialog) {
   sendMessage(jsonRequest);
 
   // Wait for response
-  usleep(500000);
-
-  std::string response;
-  {
-    std::lock_guard<std::mutex> lock(responseMutex);
-    response = lastResponse;
-    lastResponse.clear();
-  }
+  std::string response = waitForResponse(5000);
 
   std::string status = getJsonValue(response, "status");
   std::string message = getJsonValue(response, "message");
@@ -3534,14 +3527,7 @@ void show_admin_game_management() {
       sessionToken + "\",\"payload\":{\"gameType\":\"all\",\"level\":\"all\"}}";
   sendMessage(jsonRequest);
 
-  usleep(500000);
-
-  std::string response;
-  {
-    std::lock_guard<std::mutex> lock(responseMutex);
-    response = lastResponse;
-    lastResponse.clear();
-  }
+  std::string response = waitForResponse(5000);
 
   // Create scrolled list of games
   GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
