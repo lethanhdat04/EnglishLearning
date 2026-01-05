@@ -1508,7 +1508,7 @@ std::string handleLogin(const std::string& json, int clientSocket) {
                R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
                R"(,"payload":{"status":"success","message":"Login successfully","data":{"userId":")" +
                user.userId + R"(","fullname":")" + escapeJson(user.fullname) + R"(","email":")" +
-               user.email + R"(","level":")" + user.level + R"(","sessionToken":")" +
+               user.email + R"(","level":")" + user.level + R"(","role":")" + user.role + R"(","sessionToken":")" +
                sessionToken + R"(","expiresAt":)" + std::to_string(session.expiresAt) + R"(}}})";
     }
 
