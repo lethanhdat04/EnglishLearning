@@ -24,6 +24,12 @@ GtkWidget *entry_email;
 GtkWidget *entry_password;
 GtkWidget *lbl_status;
 
+// Widget đăng ký
+GtkWidget *entry_reg_fullname;
+GtkWidget *entry_reg_email;
+GtkWidget *entry_reg_password;
+GtkWidget *entry_reg_confirm;
+
 // Widget chức năng
 GtkWidget *entry_chat_msg;
 GtkWidget *entry_chat_user;
@@ -66,6 +72,7 @@ GtkWidget *lbl_words;         // shows words for sentence_order
 struct ConversationState {
   GtkWidget *dialog;
   GtkWidget *box_msgs;
+  GtkWidget *scroll_window;  // Store scrolled window reference
   std::string recipientId;
   std::string recipientLabel;
   int messageCount;
@@ -1578,11 +1585,14 @@ static gboolean refresh_conversation_messages(gpointer data) {
     }
     gtk_widget_show_all(g_conv_state->box_msgs);
 
-    // Scroll to bottom
-    GtkAdjustment *adj =
-        gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(
-            gtk_widget_get_parent(g_conv_state->box_msgs)));
-    gtk_adjustment_set_value(adj, gtk_adjustment_get_upper(adj));
+    // Scroll to bottom - use stored scroll window reference
+    if (g_conv_state->scroll_window && GTK_IS_SCROLLED_WINDOW(g_conv_state->scroll_window)) {
+      GtkAdjustment *adj =
+          gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(g_conv_state->scroll_window));
+      if (adj) {
+        gtk_adjustment_set_value(adj, gtk_adjustment_get_upper(adj));
+      }
+    }
   }
 
   return TRUE; // Keep the timer running
@@ -1759,6 +1769,7 @@ static void on_open_conversation_clicked(GtkWidget * /*widget*/,
   g_conv_state = new ConversationState;
   g_conv_state->dialog = conv;
   g_conv_state->box_msgs = box_msgs;
+  g_conv_state->scroll_window = scroll;
   g_conv_state->recipientId = recipientId;
   g_conv_state->recipientLabel = recipientLabel;
   g_conv_state->messageCount = (int)msgs.size();
@@ -3182,6 +3193,125 @@ void show_main_menu() {
   gtk_widget_show_all(window);
 }
 
+// =========================================================
+// CHỨC NĂNG ĐĂNG KÝ
+// =========================================================
+static void on_register_submit(GtkWidget *widget, gpointer dialog) {
+  (void)widget;
+
+  const char *fullname = gtk_entry_get_text(GTK_ENTRY(entry_reg_fullname));
+  const char *email = gtk_entry_get_text(GTK_ENTRY(entry_reg_email));
+  const char *password = gtk_entry_get_text(GTK_ENTRY(entry_reg_password));
+  const char *confirm = gtk_entry_get_text(GTK_ENTRY(entry_reg_confirm));
+
+  // Validate
+  if (strlen(fullname) == 0 || strlen(email) == 0 || strlen(password) == 0) {
+    GtkWidget *msg = gtk_message_dialog_new(GTK_WINDOW(dialog),
+        GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+        "Vui lòng điền đầy đủ thông tin!");
+    gtk_dialog_run(GTK_DIALOG(msg));
+    gtk_widget_destroy(msg);
+    return;
+  }
+
+  if (strcmp(password, confirm) != 0) {
+    GtkWidget *msg = gtk_message_dialog_new(GTK_WINDOW(dialog),
+        GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+        "Mật khẩu xác nhận không khớp!");
+    gtk_dialog_run(GTK_DIALOG(msg));
+    gtk_widget_destroy(msg);
+    return;
+  }
+
+  // Send register request
+  std::string jsonRequest =
+      "{\"messageType\":\"REGISTER_REQUEST\", \"payload\":{\"fullname\":\"" +
+      std::string(fullname) + "\", \"email\":\"" + std::string(email) +
+      "\", \"password\":\"" + std::string(password) +
+      "\", \"confirmPassword\":\"" + std::string(confirm) + "\"}}";
+
+  if (sendMessage(jsonRequest)) {
+    std::string response = waitForResponse(3000);
+    if (response.find("success") != std::string::npos) {
+      GtkWidget *msg = gtk_message_dialog_new(GTK_WINDOW(dialog),
+          GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
+          "Đăng ký thành công! Vui lòng đăng nhập.");
+      gtk_dialog_run(GTK_DIALOG(msg));
+      gtk_widget_destroy(msg);
+      gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_OK);
+    } else {
+      // Parse error message
+      std::string errMsg = "Đăng ký thất bại!";
+      std::regex re_msg("\"message\"\\s*:\\s*\"([^\"]+)\"");
+      std::smatch match;
+      if (std::regex_search(response, match, re_msg) && match.size() > 1)
+        errMsg = match.str(1);
+
+      GtkWidget *msg = gtk_message_dialog_new(GTK_WINDOW(dialog),
+          GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+          "%s", errMsg.c_str());
+      gtk_dialog_run(GTK_DIALOG(msg));
+      gtk_widget_destroy(msg);
+    }
+  } else {
+    GtkWidget *msg = gtk_message_dialog_new(GTK_WINDOW(dialog),
+        GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+        "Lỗi kết nối server!");
+    gtk_dialog_run(GTK_DIALOG(msg));
+    gtk_widget_destroy(msg);
+  }
+}
+
+static void show_register_dialog(GtkWidget *widget, gpointer data) {
+  (void)widget;
+  (void)data;
+
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(
+      "Đăng ký tài khoản", GTK_WINDOW(window), GTK_DIALOG_MODAL,
+      "Hủy", GTK_RESPONSE_CANCEL, NULL);
+  gtk_window_set_default_size(GTK_WINDOW(dialog), 350, 300);
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  gtk_container_set_border_width(GTK_CONTAINER(content), 20);
+
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
+  gtk_container_add(GTK_CONTAINER(content), grid);
+
+  // Fullname
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Họ và tên:"), 0, 0, 1, 1);
+  entry_reg_fullname = gtk_entry_new();
+  gtk_widget_set_hexpand(entry_reg_fullname, TRUE);
+  gtk_grid_attach(GTK_GRID(grid), entry_reg_fullname, 1, 0, 1, 1);
+
+  // Email
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Email:"), 0, 1, 1, 1);
+  entry_reg_email = gtk_entry_new();
+  gtk_grid_attach(GTK_GRID(grid), entry_reg_email, 1, 1, 1, 1);
+
+  // Password
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Mật khẩu:"), 0, 2, 1, 1);
+  entry_reg_password = gtk_entry_new();
+  gtk_entry_set_visibility(GTK_ENTRY(entry_reg_password), FALSE);
+  gtk_grid_attach(GTK_GRID(grid), entry_reg_password, 1, 2, 1, 1);
+
+  // Confirm password
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Xác nhận:"), 0, 3, 1, 1);
+  entry_reg_confirm = gtk_entry_new();
+  gtk_entry_set_visibility(GTK_ENTRY(entry_reg_confirm), FALSE);
+  gtk_grid_attach(GTK_GRID(grid), entry_reg_confirm, 1, 3, 1, 1);
+
+  // Register button
+  GtkWidget *btn_register = gtk_button_new_with_label("Đăng ký");
+  g_signal_connect(btn_register, "clicked", G_CALLBACK(on_register_submit), dialog);
+  gtk_grid_attach(GTK_GRID(grid), btn_register, 0, 4, 2, 1);
+
+  gtk_widget_show_all(dialog);
+  gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+}
+
 static void on_login_clicked(GtkWidget *widget, gpointer data) {
   const char *email = gtk_entry_get_text(GTK_ENTRY(entry_email));
   const char *pass = gtk_entry_get_text(GTK_ENTRY(entry_password));
@@ -3251,7 +3381,12 @@ int main(int argc, char *argv[]) {
 
   GtkWidget *btn_login = gtk_button_new_with_label("Đăng nhập");
   g_signal_connect(btn_login, "clicked", G_CALLBACK(on_login_clicked), NULL);
-  gtk_box_pack_start(GTK_BOX(vbox_login), btn_login, FALSE, FALSE, 20);
+  gtk_box_pack_start(GTK_BOX(vbox_login), btn_login, FALSE, FALSE, 10);
+
+  // Thêm link đăng ký
+  GtkWidget *btn_register = gtk_button_new_with_label("Chưa có tài khoản? Đăng ký");
+  g_signal_connect(btn_register, "clicked", G_CALLBACK(show_register_dialog), NULL);
+  gtk_box_pack_start(GTK_BOX(vbox_login), btn_register, FALSE, FALSE, 5);
 
   lbl_status = gtk_label_new("");
   gtk_box_pack_start(GTK_BOX(vbox_login), lbl_status, FALSE, FALSE, 0);
