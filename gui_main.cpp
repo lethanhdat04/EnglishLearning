@@ -2165,7 +2165,205 @@ static void on_voice_call_button_clicked(GtkWidget *widget, gpointer data) {
 // EXERCISES DIALOG - Browse and do exercises
 // ============================================================================
 
+// Structure to hold exercise data for callbacks
+struct ExerciseData {
+  std::string exerciseId;
+  std::string exerciseType;
+  std::string title;
+  std::string instructions;
+  GtkWidget *parentDialog;
+};
+
+// Global list to manage allocated ExerciseData
+static std::vector<ExerciseData*> g_exerciseDataList;
+
+// Function to open exercise working dialog
+static void open_exercise_work_dialog(const std::string& exerciseId,
+                                       const std::string& exerciseType,
+                                       const std::string& title) {
+  // First, get full exercise details
+  std::string getRequest = "{\"messageType\":\"GET_EXERCISE_REQUEST\", \"sessionToken\":\"" +
+                           sessionToken + "\", \"payload\":{\"exerciseId\":\"" + exerciseId + "\"}}";
+
+  if (!sendMessage(getRequest)) {
+    GtkWidget *error = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR,
+                               GTK_BUTTONS_OK, "Không thể kết nối đến server");
+    gtk_dialog_run(GTK_DIALOG(error));
+    gtk_widget_destroy(error);
+    return;
+  }
+
+  std::string response = waitForResponse(5000);
+  if (response.empty() || response.find("\"status\":\"success\"") == std::string::npos) {
+    GtkWidget *error = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR,
+                               GTK_BUTTONS_OK, "Không thể tải bài tập");
+    gtk_dialog_run(GTK_DIALOG(error));
+    gtk_widget_destroy(error);
+    return;
+  }
+
+  // Extract instructions
+  std::string instructions = "";
+  std::regex re_inst("\"instructions\"\\s*:\\s*\"([^\"]+)\"");
+  std::smatch match;
+  if (std::regex_search(response, match, re_inst) && match.size() > 1) {
+    instructions = match.str(1);
+  }
+
+  // Create work dialog
+  GtkWidget *workDialog = gtk_dialog_new_with_buttons(
+      title.c_str(), GTK_WINDOW(window), GTK_DIALOG_MODAL,
+      "Lưu nháp", 1,
+      "Nộp bài", 2,
+      "Hủy", GTK_RESPONSE_CANCEL,
+      NULL);
+  gtk_window_set_default_size(GTK_WINDOW(workDialog), 700, 600);
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(workDialog));
+  gtk_container_set_border_width(GTK_CONTAINER(content), 15);
+
+  // Title
+  GtkWidget *lblTitle = gtk_label_new(NULL);
+  std::string titleMarkup = "<b><big>" + title + "</big></b>";
+  gtk_label_set_markup(GTK_LABEL(lblTitle), titleMarkup.c_str());
+  gtk_box_pack_start(GTK_BOX(content), lblTitle, FALSE, FALSE, 10);
+
+  // Type label
+  GtkWidget *lblType = gtk_label_new(NULL);
+  std::string typeText = "Loại: " + exerciseType;
+  gtk_label_set_text(GTK_LABEL(lblType), typeText.c_str());
+  gtk_box_pack_start(GTK_BOX(content), lblType, FALSE, FALSE, 5);
+
+  // Instructions
+  GtkWidget *lblInst = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(lblInst), "<b>Hướng dẫn:</b>");
+  gtk_widget_set_halign(lblInst, GTK_ALIGN_START);
+  gtk_box_pack_start(GTK_BOX(content), lblInst, FALSE, FALSE, 10);
+
+  GtkWidget *lblInstText = gtk_label_new(instructions.c_str());
+  gtk_label_set_line_wrap(GTK_LABEL(lblInstText), TRUE);
+  gtk_widget_set_halign(lblInstText, GTK_ALIGN_START);
+  gtk_box_pack_start(GTK_BOX(content), lblInstText, FALSE, FALSE, 5);
+
+  // Separator
+  GtkWidget *sep = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+  gtk_box_pack_start(GTK_BOX(content), sep, FALSE, FALSE, 10);
+
+  // Answer label
+  GtkWidget *lblAnswer = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(lblAnswer), "<b>Bài làm của bạn:</b>");
+  gtk_widget_set_halign(lblAnswer, GTK_ALIGN_START);
+  gtk_box_pack_start(GTK_BOX(content), lblAnswer, FALSE, FALSE, 5);
+
+  // Text view for answer
+  GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
+                                 GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scrolled), 250);
+  gtk_box_pack_start(GTK_BOX(content), scrolled, TRUE, TRUE, 5);
+
+  GtkWidget *textView = gtk_text_view_new();
+  gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(textView), GTK_WRAP_WORD_CHAR);
+  gtk_text_view_set_left_margin(GTK_TEXT_VIEW(textView), 10);
+  gtk_text_view_set_right_margin(GTK_TEXT_VIEW(textView), 10);
+  gtk_text_view_set_top_margin(GTK_TEXT_VIEW(textView), 10);
+  gtk_text_view_set_bottom_margin(GTK_TEXT_VIEW(textView), 10);
+  gtk_container_add(GTK_CONTAINER(scrolled), textView);
+
+  gtk_widget_show_all(workDialog);
+
+  // Run dialog and handle response
+  gint result = gtk_dialog_run(GTK_DIALOG(workDialog));
+
+  if (result == 1 || result == 2) {
+    // Get text content
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textView));
+    GtkTextIter start, end;
+    gtk_text_buffer_get_bounds(buffer, &start, &end);
+    gchar *text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    std::string content_text = text ? text : "";
+    g_free(text);
+
+    if (content_text.empty()) {
+      GtkWidget *warn = gtk_message_dialog_new(GTK_WINDOW(workDialog), GTK_DIALOG_MODAL,
+                                 GTK_MESSAGE_WARNING, GTK_BUTTONS_OK,
+                                 "Vui lòng nhập nội dung bài làm!");
+      gtk_dialog_run(GTK_DIALOG(warn));
+      gtk_widget_destroy(warn);
+    } else {
+      // Escape content for JSON
+      std::string escapedContent = "";
+      for (char c : content_text) {
+        if (c == '"') escapedContent += "\\\"";
+        else if (c == '\\') escapedContent += "\\\\";
+        else if (c == '\n') escapedContent += "\\n";
+        else if (c == '\r') escapedContent += "\\r";
+        else if (c == '\t') escapedContent += "\\t";
+        else escapedContent += c;
+      }
+
+      std::string msgType = (result == 1) ? "SAVE_DRAFT_REQUEST" : "SUBMIT_EXERCISE_REQUEST";
+      std::string submitRequest;
+
+      if (result == 1) {
+        // Save draft
+        submitRequest = "{\"messageType\":\"" + msgType + "\", \"sessionToken\":\"" +
+                        sessionToken + "\", \"payload\":{\"exerciseId\":\"" + exerciseId +
+                        "\", \"content\":\"" + escapedContent + "\", \"audioUrl\":\"\"}}";
+      } else {
+        // Submit exercise
+        submitRequest = "{\"messageType\":\"" + msgType + "\", \"sessionToken\":\"" +
+                        sessionToken + "\", \"payload\":{\"exerciseId\":\"" + exerciseId +
+                        "\", \"exerciseType\":\"" + exerciseType +
+                        "\", \"content\":\"" + escapedContent + "\", \"audioUrl\":\"\"}}";
+      }
+
+      if (sendMessage(submitRequest)) {
+        std::string submitResponse = waitForResponse(5000);
+        if (submitResponse.find("\"status\":\"success\"") != std::string::npos) {
+          const char *successMsg = (result == 1) ?
+              "Đã lưu nháp thành công!" :
+              "Đã nộp bài thành công!\nGiáo viên sẽ chấm và phản hồi.";
+          GtkWidget *success = gtk_message_dialog_new(GTK_WINDOW(workDialog), GTK_DIALOG_MODAL,
+                                       GTK_MESSAGE_INFO, GTK_BUTTONS_OK, "%s", successMsg);
+          gtk_dialog_run(GTK_DIALOG(success));
+          gtk_widget_destroy(success);
+        } else {
+          GtkWidget *error = gtk_message_dialog_new(GTK_WINDOW(workDialog), GTK_DIALOG_MODAL,
+                                       GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+                                       "Có lỗi xảy ra. Vui lòng thử lại!");
+          gtk_dialog_run(GTK_DIALOG(error));
+          gtk_widget_destroy(error);
+        }
+      }
+    }
+  }
+
+  gtk_widget_destroy(workDialog);
+}
+
+// Callback when "Bắt đầu" button is clicked
+static void on_exercise_start_clicked(GtkWidget *widget, gpointer data) {
+  ExerciseData *exData = (ExerciseData*)data;
+  if (exData && exData->parentDialog) {
+    // Hide parent dialog temporarily
+    gtk_widget_hide(exData->parentDialog);
+
+    // Open work dialog
+    open_exercise_work_dialog(exData->exerciseId, exData->exerciseType, exData->title);
+
+    // Show parent dialog again
+    gtk_widget_show(exData->parentDialog);
+  }
+}
+
 void show_exercises_dialog() {
+  // Clear previous exercise data
+  for (auto* data : g_exerciseDataList) {
+    delete data;
+  }
+  g_exerciseDataList.clear();
+
   // Send request to get exercise list
   std::string jsonRequest =
       "{\"messageType\":\"GET_EXERCISE_LIST_REQUEST\", \"sessionToken\":\"" +
@@ -2204,7 +2402,7 @@ void show_exercises_dialog() {
   GtkWidget *dialog = gtk_dialog_new_with_buttons(
       "Làm bài tập", GTK_WINDOW(window), GTK_DIALOG_MODAL,
       "Đóng", GTK_RESPONSE_CLOSE, NULL);
-  gtk_window_set_default_size(GTK_WINDOW(dialog), 600, 500);
+  gtk_window_set_default_size(GTK_WINDOW(dialog), 650, 550);
 
   GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
   GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
@@ -2247,15 +2445,20 @@ void show_exercises_dialog() {
           exerciseCount++;
 
           // Extract fields using regex
+          std::string exerciseId = "";
           std::string exerciseTitle = "";
           std::string exerciseType = "";
           std::string duration = "";
 
+          std::regex re_id("\"exerciseId\"\\s*:\\s*\"([^\"]+)\"");
           std::regex re_title("\"title\"\\s*:\\s*\"([^\"]+)\"");
           std::regex re_type("\"exerciseType\"\\s*:\\s*\"([^\"]+)\"");
           std::regex re_duration("\"duration\"\\s*:\\s*(\\d+)");
           std::smatch match;
 
+          if (std::regex_search(obj, match, re_id) && match.size() > 1) {
+            exerciseId = match.str(1);
+          }
           if (std::regex_search(obj, match, re_title) && match.size() > 1) {
             exerciseTitle = match.str(1);
           }
@@ -2279,17 +2482,31 @@ void show_exercises_dialog() {
 
           // Title and type
           GtkWidget *lblTitle = gtk_label_new(NULL);
-          std::string markup = "<b>" + exerciseTitle + "</b> (" + exerciseType + ")";
+          std::string markup = "<b>" + exerciseTitle + "</b>";
           gtk_label_set_markup(GTK_LABEL(lblTitle), markup.c_str());
           gtk_widget_set_halign(lblTitle, GTK_ALIGN_START);
           gtk_box_pack_start(GTK_BOX(infoBox), lblTitle, FALSE, FALSE, 0);
 
-          // Duration
-          GtkWidget *lblDuration = gtk_label_new(NULL);
-          std::string durationText = "Thời gian: " + duration + " phút";
-          gtk_label_set_text(GTK_LABEL(lblDuration), durationText.c_str());
-          gtk_widget_set_halign(lblDuration, GTK_ALIGN_START);
-          gtk_box_pack_start(GTK_BOX(infoBox), lblDuration, FALSE, FALSE, 0);
+          // Type and Duration
+          GtkWidget *lblInfo = gtk_label_new(NULL);
+          std::string infoText = "Loại: " + exerciseType + " | Thời gian: " + duration + " phút";
+          gtk_label_set_text(GTK_LABEL(lblInfo), infoText.c_str());
+          gtk_widget_set_halign(lblInfo, GTK_ALIGN_START);
+          gtk_box_pack_start(GTK_BOX(infoBox), lblInfo, FALSE, FALSE, 0);
+
+          // Start button
+          GtkWidget *btnStart = gtk_button_new_with_label("Bắt đầu");
+          gtk_box_pack_end(GTK_BOX(hbox), btnStart, FALSE, FALSE, 0);
+
+          // Store exercise data for callback
+          ExerciseData *exData = new ExerciseData();
+          exData->exerciseId = exerciseId;
+          exData->exerciseType = exerciseType;
+          exData->title = exerciseTitle;
+          exData->parentDialog = dialog;
+          g_exerciseDataList.push_back(exData);
+
+          g_signal_connect(btnStart, "clicked", G_CALLBACK(on_exercise_start_clicked), exData);
 
           objStart = std::string::npos;
         }
@@ -2303,15 +2520,15 @@ void show_exercises_dialog() {
   gtk_label_set_text(GTK_LABEL(countLabel), countText.c_str());
   gtk_box_pack_start(GTK_BOX(vbox), countLabel, FALSE, FALSE, 10);
 
-  // Note about full functionality
-  GtkWidget *note = gtk_label_new(NULL);
-  gtk_label_set_markup(GTK_LABEL(note),
-      "<i>Lưu ý: Nhấp vào bài tập để bắt đầu làm.\nChức năng này đang được phát triển.</i>");
-  gtk_box_pack_start(GTK_BOX(vbox), note, FALSE, FALSE, 10);
-
   gtk_widget_show_all(dialog);
   gtk_dialog_run(GTK_DIALOG(dialog));
   gtk_widget_destroy(dialog);
+
+  // Clean up exercise data
+  for (auto* data : g_exerciseDataList) {
+    delete data;
+  }
+  g_exerciseDataList.clear();
 }
 
 // ============================================================================
