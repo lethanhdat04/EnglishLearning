@@ -736,12 +736,16 @@ static void show_picture_match_game(
   // Parse result
   std::string score = "?", maxScore = "?", grade = "?", percentage = "?";
   auto pickVal = [&](const std::string &key) {
-    std::regex r("\\\"" + key + "\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
-    std::smatch m;
-    if (std::regex_search(submitResp, m, r) && m.size() > 1)
-      return m.str(1);
-    return std::string("?");
-  };
+  std::regex r(
+      "\\\"" + key +
+      "\\\"\\s*:\\s*(?:\\\"([^\\\"]+)\\\"|([0-9]+))");
+  std::smatch m;
+  if (std::regex_search(submitResp, m, r)) {
+    if (m[1].matched) return m.str(1); // string
+    if (m[2].matched) return m.str(2); // number
+  }
+  return std::string("?");
+};
   score = pickVal("score");
   maxScore = pickVal("maxScore");
   grade = pickVal("grade");
@@ -1534,11 +1538,11 @@ static gboolean refresh_conversation_messages(gpointer data) {
     g_conv_state->messageCount = newCount;
 
     // Show notification
-    GtkWidget *notif = gtk_message_dialog_new(
-        NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
-        "📬 New message from %s!", g_conv_state->recipientLabel.c_str());
-    gtk_dialog_run(GTK_DIALOG(notif));
-    gtk_widget_destroy(notif);
+    // GtkWidget *notif = gtk_message_dialog_new(
+    //     NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
+    //     "📬 New message from %s!", g_conv_state->recipientLabel.c_str());
+    // gtk_dialog_run(GTK_DIALOG(notif));
+    // gtk_widget_destroy(notif);
 
     // Clear and rebuild message list
     gtk_container_foreach(GTK_CONTAINER(g_conv_state->box_msgs),
