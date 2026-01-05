@@ -307,25 +307,64 @@ static GdkPixbuf *create_placeholder_pixbuf(const std::string &color,
   cairo_set_line_width(cr, 3.0);
   cairo_stroke(cr);
 
-  // Draw emoji text centered
-  cairo_select_font_face(cr, "Noto Color Emoji", CAIRO_FONT_SLANT_NORMAL,
-                         CAIRO_FONT_WEIGHT_NORMAL);
-  cairo_set_font_size(cr, height * 0.5);
+  // Try multiple fonts for emoji support (fallback chain)
+  const char *fonts[] = {
+    "Noto Color Emoji",
+    "Segoe UI Emoji",
+    "Apple Color Emoji",
+    "EmojiOne",
+    "Symbola",
+    "DejaVu Sans",
+    "Sans"
+  };
 
-  cairo_text_extents_t extents;
-  cairo_text_extents(cr, emoji.c_str(), &extents);
+  bool textDrawn = false;
+  for (const char *fontName : fonts) {
+    cairo_select_font_face(cr, fontName, CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, height * 0.5);
 
-  double tx = (width - extents.width) / 2 - extents.x_bearing;
-  double ty = (height - extents.height) / 2 - extents.y_bearing;
+    cairo_text_extents_t extents;
+    cairo_text_extents(cr, emoji.c_str(), &extents);
 
-  // Draw emoji with shadow
-  cairo_set_source_rgba(cr, 0, 0, 0, 0.3);
-  cairo_move_to(cr, tx + 2, ty + 2);
-  cairo_show_text(cr, emoji.c_str());
+    // Check if font can render the text (has non-zero dimensions)
+    if (extents.width > 0 && extents.height > 0) {
+      double tx = (width - extents.width) / 2 - extents.x_bearing;
+      double ty = (height - extents.height) / 2 - extents.y_bearing;
 
-  cairo_set_source_rgb(cr, 1, 1, 1);
-  cairo_move_to(cr, tx, ty);
-  cairo_show_text(cr, emoji.c_str());
+      // Draw emoji with shadow
+      cairo_set_source_rgba(cr, 0, 0, 0, 0.3);
+      cairo_move_to(cr, tx + 2, ty + 2);
+      cairo_show_text(cr, emoji.c_str());
+
+      cairo_set_source_rgb(cr, 1, 1, 1);
+      cairo_move_to(cr, tx, ty);
+      cairo_show_text(cr, emoji.c_str());
+
+      textDrawn = true;
+      break;
+    }
+  }
+
+  // Fallback: draw a simple shape if no font could render the emoji
+  if (!textDrawn) {
+    // Draw a circle in the center as fallback
+    cairo_set_source_rgb(cr, 1, 1, 1);
+    cairo_arc(cr, width / 2, height / 2, height * 0.25, 0, 2 * G_PI);
+    cairo_fill(cr);
+
+    // Draw question mark or first char of emoji
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, height * 0.3);
+    cairo_set_source_rgb(cr, r * 0.5, g * 0.5, b * 0.5);
+
+    cairo_text_extents_t extents;
+    cairo_text_extents(cr, "?", &extents);
+    double tx = (width - extents.width) / 2 - extents.x_bearing;
+    double ty = (height - extents.height) / 2 - extents.y_bearing;
+    cairo_move_to(cr, tx, ty);
+    cairo_show_text(cr, "?");
+  }
 
   // Convert Cairo surface to GdkPixbuf
   cairo_surface_flush(surface);
@@ -360,13 +399,18 @@ static GdkPixbuf *load_game_image(const std::string &source, int width,
                                   int height) {
   GdkPixbuf *pixbuf = nullptr;
 
+  g_print("[LOAD_IMAGE] source='%s'\n", source.c_str());
+
   // Check if it's a placeholder format
   std::string color, emoji;
   if (parse_placeholder_format(source, color, emoji)) {
+    g_print("[LOAD_IMAGE] Parsed placeholder: color='%s' emoji='%s'\n",
+            color.c_str(), emoji.c_str());
     pixbuf = create_placeholder_pixbuf(color, emoji, width, height);
   }
   // Check if it's a local file
   else if (source.find("http://") != 0 && source.find("https://") != 0) {
+    g_print("[LOAD_IMAGE] Loading local file\n");
     GError *error = nullptr;
     pixbuf = gdk_pixbuf_new_from_file_at_scale(source.c_str(), width, height,
                                                TRUE, &error);
@@ -379,9 +423,11 @@ static GdkPixbuf *load_game_image(const std::string &source, int width,
   }
   // URL - create placeholder with URL indicator
   else {
+    g_print("[LOAD_IMAGE] URL detected, using placeholder\n");
     pixbuf = create_placeholder_pixbuf("#3498DB", "🌐", width, height);
   }
 
+  g_print("[LOAD_IMAGE] pixbuf=%p\n", (void*)pixbuf);
   return pixbuf;
 }
 
@@ -656,9 +702,12 @@ static void show_picture_match_game(
     // Create button containing the image
     GtkWidget *btn = gtk_button_new();
     gtk_container_add(GTK_CONTAINER(btn), image);
+    gtk_widget_set_size_request(btn, 120, 120);  // Minimum size for visibility
 
     GtkStyleContext *ctx = gtk_widget_get_style_context(btn);
     gtk_style_context_add_class(ctx, "pm-image-btn");
+
+    g_print("[PICTURE_MATCH] Created image button %zu\n", i);
 
     // Connect click handler
     g_signal_connect(btn, "clicked", G_CALLBACK(on_pm_image_clicked),
@@ -1928,6 +1977,19 @@ void show_game_dialog() {
   // Special handling for picture_match: use visual image dialog
   if (gameType == "picture_match") {
     auto pairs = parse_pairs(gameData, "word", "imageUrl");
+    g_print("[PICTURE_MATCH] Parsed %zu pairs\n", pairs.size());
+    for (size_t i = 0; i < pairs.size(); i++) {
+      g_print("  [%zu] word='%s' imageUrl='%s'\n", i,
+              pairs[i].first.c_str(), pairs[i].second.c_str());
+    }
+    if (pairs.empty()) {
+      GtkWidget *err = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL,
+          GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+          "Không parse được dữ liệu game. Vui lòng thử lại.");
+      gtk_dialog_run(GTK_DIALOG(err));
+      gtk_widget_destroy(err);
+      return;
+    }
     show_picture_match_game(gameTitle, gameSessionId, gameId, timeLimit, pairs);
     return;
   }
