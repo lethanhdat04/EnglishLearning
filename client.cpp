@@ -66,6 +66,7 @@ std::string sessionToken = "";
 std::string currentUserId = "";
 std::string currentUserName = "";
 std::string currentLevel = "beginner";
+std::string currentRole = "student";  // Role: student, teacher, admin
 std::atomic<bool> running(true);
 std::atomic<bool> loggedIn(false);
 std::atomic<bool> inChatMode(false);
@@ -464,28 +465,53 @@ std::string sendAndReceive(const std::string& request) {
 
 // Forward declaration
 void openChatWith(const std::string& recipientId, const std::string& recipientName);
+void gradeSubmissions();  // Teacher grading function
+
+// Role helper functions
+bool isTeacherRole() {
+    return currentRole == "teacher" || currentRole == "admin";
+}
+
+bool isStudentRole() {
+    return currentRole == "student";
+}
 
 void showMainMenu() {
     clearScreen();
     printColored("╔══════════════════════════════════════════╗\n", "cyan");
-    printColored("║     ENGLISH LEARNING APP - MAIN MENU     ║\n", "cyan");
+    if (isTeacherRole()) {
+        printColored("║    ENGLISH LEARNING - TEACHER PORTAL     ║\n", "cyan");
+    } else {
+        printColored("║     ENGLISH LEARNING APP - MAIN MENU     ║\n", "cyan");
+    }
     printColored("╠══════════════════════════════════════════╣\n", "cyan");
     printColored("║  User: ", "cyan");
     printColored(currentUserName, "yellow");
-    printColored(" | Level: ", "cyan");
-    printColored(currentLevel, "green");
+    printColored(" | Role: ", "cyan");
+    printColored(currentRole, "green");
     printColored("\n", "");
     printColored("╠══════════════════════════════════════════╣\n", "cyan");
-    printColored("║  1. Set English Level                    ║\n", "");
-    printColored("║  2. View All Lessons                     ║\n", "");
-    printColored("║  3. Take a Test                          ║\n", "");
-    printColored("║  4. Do Exercises                         ║\n", "");
-    printColored("║  5. View Teacher Feedback                ║\n", "");
-    printColored("║  6. Play Games                           ║\n", "");
-    printColored("║  7. Chat with Others                     ║\n", "");
-    printColored("║  8. Voice Call                           ║\n", "");
-    printColored("║  9. Logout                               ║\n", "");
-    printColored("║  0. Exit                                 ║\n", "");
+
+    if (isStudentRole()) {
+        // Student menu
+        printColored("║  1. Set English Level                    ║\n", "");
+        printColored("║  2. View All Lessons                     ║\n", "");
+        printColored("║  3. Take a Test                          ║\n", "");
+        printColored("║  4. Do Exercises                         ║\n", "");
+        printColored("║  5. View Teacher Feedback                ║\n", "");
+        printColored("║  6. Play Games                           ║\n", "");
+        printColored("║  7. Chat with Others                     ║\n", "");
+        printColored("║  8. Voice Call                           ║\n", "");
+        printColored("║  9. Logout                               ║\n", "");
+        printColored("║  0. Exit                                 ║\n", "");
+    } else {
+        // Teacher menu
+        printColored("║  1. Chat with Others                     ║\n", "");
+        printColored("║  2. Grade Submissions                    ║\n", "");
+        printColored("║  3. Voice Call                           ║\n", "");
+        printColored("║  9. Logout                               ║\n", "");
+        printColored("║  0. Exit                                 ║\n", "");
+    }
     printColored("╚══════════════════════════════════════════╝\n", "cyan");
 
     // [FIX] Hiển thị thông báo tin nhắn mới nếu có
@@ -601,9 +627,11 @@ bool login() {
         currentUserId = getJsonValue(data, "userId");
         currentUserName = getJsonValue(data, "fullname");
         currentLevel = getJsonValue(data, "level");
+        currentRole = getJsonValue(data, "role");
+        if (currentRole.empty()) currentRole = "student";  // Default fallback
 
         printColored("\n[SUCCESS] " + message + "\n", "green");
-        printColored("Welcome, " + currentUserName + "!\n", "yellow");
+        printColored("Welcome, " + currentUserName + " (" + currentRole + ")!\n", "yellow");
         loggedIn = true;
         return true;
     } else {
@@ -1812,6 +1840,172 @@ void viewFeedback() {
 }
 
 // ============================================================================
+// TEACHER GRADING (Role: teacher/admin only)
+// ============================================================================
+
+void gradeSubmissions() {
+    clearScreen();
+    printColored("╔══════════════════════════════════════════╗\n", "cyan");
+    printColored("║         GRADE STUDENT SUBMISSIONS        ║\n", "cyan");
+    printColored("╚══════════════════════════════════════════╝\n", "cyan");
+
+    // Get pending submissions
+    std::string request = R"({"messageType":"GET_PENDING_REVIEWS_REQUEST","messageId":")" + generateMessageId() +
+                          R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                          R"(,"sessionToken":")" + sessionToken + R"(","payload":{}})";
+
+    std::string response = sendAndReceive(request);
+    std::string status = getJsonValue(response, "status");
+
+    if (status != "success") {
+        std::string message = getJsonValue(response, "message");
+        printColored("\n[ERROR] " + message + "\n", "red");
+        waitEnter();
+        return;
+    }
+
+    std::string data = getJsonObject(response, "data");
+    std::string submissionsArray = getJsonArray(data, "submissions");
+    std::vector<std::string> submissionsList = parseJsonArray(submissionsArray);
+
+    if (submissionsList.empty()) {
+        printColored("\n[INFO] No pending submissions to review.\n", "green");
+        printColored("All student work has been graded!\n", "");
+        waitEnter();
+        return;
+    }
+
+    // Display pending submissions
+    printColored("\nPending Submissions (" + std::to_string(submissionsList.size()) + "):\n", "yellow");
+    printColored("┌────┬─────────────────┬───────────────────┬─────────────────┐\n", "cyan");
+    printColored("│ #  │ Student         │ Exercise          │ Submitted       │\n", "cyan");
+    printColored("├────┼─────────────────┼───────────────────┼─────────────────┤\n", "cyan");
+
+    std::vector<std::map<std::string, std::string>> submissions;
+    int idx = 1;
+    for (const auto& subJson : submissionsList) {
+        std::map<std::string, std::string> sub;
+        sub["submissionId"] = getJsonValue(subJson, "submissionId");
+        sub["studentName"] = getJsonValue(subJson, "studentName");
+        sub["exerciseTitle"] = getJsonValue(subJson, "exerciseTitle");
+        sub["exerciseType"] = getJsonValue(subJson, "exerciseType");
+        sub["content"] = getJsonValue(subJson, "content");
+        sub["audioUrl"] = getJsonValue(subJson, "audioUrl");
+        sub["submittedAt"] = getJsonValue(subJson, "submittedAt");
+        submissions.push_back(sub);
+
+        // Format date
+        char timeBuf[64] = "";
+        if (!sub["submittedAt"].empty() && sub["submittedAt"] != "0") {
+            int64_t ts = std::stoll(sub["submittedAt"]);
+            time_t t = ts;
+            strftime(timeBuf, sizeof(timeBuf), "%m-%d %H:%M", localtime(&t));
+        }
+
+        char row[256];
+        snprintf(row, sizeof(row), "│ %-2d │ %-15.15s │ %-17.17s │ %-15s │\n",
+                 idx++, sub["studentName"].c_str(), sub["exerciseTitle"].c_str(), timeBuf);
+        printColored(row, "");
+    }
+    printColored("└────┴─────────────────┴───────────────────┴─────────────────┘\n", "cyan");
+
+    // Select submission to grade
+    printColored("\nEnter submission # to grade (0 to go back): ", "green");
+    std::string input;
+    std::getline(std::cin, input);
+
+    if (input.empty() || input == "0") return;
+
+    int choice = 0;
+    try {
+        choice = std::stoi(input);
+    } catch (...) {
+        printColored("\n[ERROR] Invalid input.\n", "red");
+        waitEnter();
+        return;
+    }
+
+    if (choice < 1 || choice > (int)submissions.size()) {
+        printColored("\n[ERROR] Invalid selection.\n", "red");
+        waitEnter();
+        return;
+    }
+
+    auto& selected = submissions[choice - 1];
+
+    // Show submission detail
+    clearScreen();
+    printColored("╔══════════════════════════════════════════╗\n", "cyan");
+    printColored("║           REVIEW SUBMISSION              ║\n", "cyan");
+    printColored("╚══════════════════════════════════════════╝\n", "cyan");
+
+    printColored("\n── Student: ", "yellow");
+    printColored(selected["studentName"] + "\n", "white");
+    printColored("── Exercise: ", "yellow");
+    printColored(selected["exerciseTitle"] + "\n", "white");
+    printColored("── Type: ", "yellow");
+    printColored(selected["exerciseType"] + "\n", "white");
+
+    printColored("\n─────────────── SUBMISSION CONTENT ───────────────\n", "magenta");
+    printColored(selected["content"] + "\n", "white");
+    printColored("──────────────────────────────────────────────────\n", "magenta");
+
+    if (!selected["audioUrl"].empty()) {
+        printColored("\nAudio URL: ", "yellow");
+        printColored(selected["audioUrl"] + "\n", "cyan");
+    }
+
+    // Input score
+    printColored("\n── Enter Score (0-100): ", "green");
+    std::string scoreInput;
+    std::getline(std::cin, scoreInput);
+
+    int score = 0;
+    try {
+        score = std::stoi(scoreInput);
+        if (score < 0 || score > 100) {
+            printColored("\n[ERROR] Score must be between 0 and 100.\n", "red");
+            waitEnter();
+            return;
+        }
+    } catch (...) {
+        printColored("\n[ERROR] Invalid score.\n", "red");
+        waitEnter();
+        return;
+    }
+
+    // Input feedback
+    printColored("── Enter Feedback: ", "green");
+    std::string feedback;
+    std::getline(std::cin, feedback);
+
+    if (feedback.empty()) {
+        feedback = "Good work!";
+    }
+
+    // Submit review
+    std::string reviewRequest = R"({"messageType":"REVIEW_EXERCISE_REQUEST","messageId":")" + generateMessageId() +
+                                R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                                R"(,"sessionToken":")" + sessionToken +
+                                R"(","payload":{"submissionId":")" + selected["submissionId"] +
+                                R"(","score":)" + std::to_string(score) +
+                                R"(,"feedback":")" + escapeJson(feedback) + R"("}})";
+
+    std::string reviewResponse = sendAndReceive(reviewRequest);
+    std::string reviewStatus = getJsonValue(reviewResponse, "status");
+
+    if (reviewStatus == "success") {
+        printColored("\n[SUCCESS] Review submitted successfully!\n", "green");
+        printColored("Student will be notified of your feedback.\n", "");
+    } else {
+        std::string errorMsg = getJsonValue(reviewResponse, "message");
+        printColored("\n[ERROR] " + errorMsg + "\n", "red");
+    }
+
+    waitEnter();
+}
+
+// ============================================================================
 // PLAY GAMES
 // ============================================================================
 
@@ -2667,32 +2861,58 @@ int main_cli(int argc, char* argv[]) {
         std::string input;
         std::getline(std::cin, input);
 
-        if (input == "1") {
-            setLevel();
-        } else if (input == "2") {
-            viewLessons();
-        } else if (input == "3") {
-            takeTest();
-        } else if (input == "4") {
-            doExercises();
-        } else if (input == "5") {
-            viewFeedback();
-        } else if (input == "6") {
-            playGames();
-        } else if (input == "7") {
-            chat();
-        } else if (input == "8") {
-            voiceCall();
-        } else if (input == "9") {
-            loggedIn = false;
-            sessionToken = "";
-            currentUserId = "";
-            currentUserName = "";
-            printColored("\n[INFO] Logged out successfully.\n", "yellow");
-            waitEnter();
-        } else if (input == "0") {
-            running = false;
-        } else if (input == "c" || input == "C") {
+        if (isStudentRole()) {
+            // Student actions
+            if (input == "1") {
+                setLevel();
+            } else if (input == "2") {
+                viewLessons();
+            } else if (input == "3") {
+                takeTest();
+            } else if (input == "4") {
+                doExercises();
+            } else if (input == "5") {
+                viewFeedback();
+            } else if (input == "6") {
+                playGames();
+            } else if (input == "7") {
+                chat();
+            } else if (input == "8") {
+                voiceCall();
+            } else if (input == "9") {
+                loggedIn = false;
+                sessionToken = "";
+                currentUserId = "";
+                currentUserName = "";
+                currentRole = "student";
+                printColored("\n[INFO] Logged out successfully.\n", "yellow");
+                waitEnter();
+            } else if (input == "0") {
+                running = false;
+            }
+        } else {
+            // Teacher actions
+            if (input == "1") {
+                chat();
+            } else if (input == "2") {
+                gradeSubmissions();
+            } else if (input == "3") {
+                voiceCall();
+            } else if (input == "9") {
+                loggedIn = false;
+                sessionToken = "";
+                currentUserId = "";
+                currentUserName = "";
+                currentRole = "student";
+                printColored("\n[INFO] Logged out successfully.\n", "yellow");
+                waitEnter();
+            } else if (input == "0") {
+                running = false;
+            }
+        }
+
+        // Common shortcuts for both roles
+        if (input == "c" || input == "C") {
             // Answer incoming call
             answerIncomingCall();
         } else if (input == "r" || input == "R") {

@@ -8,6 +8,7 @@
 // Khai báo extern để gui_main.cpp hiểu là các biến này đang nằm bên client.cpp
 extern std::string sessionToken; // Token đăng nhập
 extern std::string currentLevel; // Level hiện tại (beginner/intermediate...)
+extern std::string currentRole;  // Role: student, teacher, admin
 extern bool running;             // Trạng thái chương trình
 
 // --- CÁC HÀM DÙNG CHUNG (Shared Functions) ---

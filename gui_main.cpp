@@ -77,6 +77,16 @@ static ConversationState *g_conv_state = nullptr;
 void show_main_menu();
 void show_test_dialog();
 void show_game_dialog();
+void show_grading_dialog();  // Teacher grading dialog
+
+// Role helper functions
+static bool isTeacherRole() {
+    return currentRole == "teacher" || currentRole == "admin";
+}
+
+static bool isStudentRole() {
+    return currentRole == "student";
+}
 
 // Escape JSON for small payloads
 static std::string escape_json(const std::string &s) {
@@ -2847,7 +2857,231 @@ void show_voice_call_dialog() {
   gtk_widget_destroy(dialog);
 }
 
-void on_menu_btn_clicked(GtkWidget *widget, gpointer data) {
+// =========================================================
+// TEACHER GRADING DIALOG
+// =========================================================
+
+// Structure to hold pending submission data
+struct PendingSubmissionData {
+  std::string submissionId;
+  std::string studentName;
+  std::string exerciseTitle;
+  std::string exerciseType;
+  std::string content;
+  std::string audioUrl;
+};
+
+static std::vector<PendingSubmissionData> g_pending_submissions;
+
+// Callback when teacher clicks "Cham bai" button for a submission
+static void on_grade_button_clicked(GtkWidget *widget, gpointer data) {
+  int idx = GPOINTER_TO_INT(data);
+  if (idx < 0 || idx >= (int)g_pending_submissions.size()) return;
+
+  const PendingSubmissionData& sub = g_pending_submissions[idx];
+
+  // Create grading dialog
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(
+      "Cham bai", GTK_WINDOW(window), GTK_DIALOG_MODAL,
+      "Gui phan hoi", GTK_RESPONSE_ACCEPT,
+      "Huy", GTK_RESPONSE_CANCEL, NULL);
+  gtk_window_set_default_size(GTK_WINDOW(dialog), 500, 450);
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  gtk_container_set_border_width(GTK_CONTAINER(content), 15);
+
+  // Student and exercise info
+  std::string info = "<b>Hoc sinh:</b> " + sub.studentName +
+                     "\n<b>Bai tap:</b> " + sub.exerciseTitle +
+                     "\n<b>Loai:</b> " + sub.exerciseType;
+  GtkWidget *lbl_info = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(lbl_info), info.c_str());
+  gtk_label_set_xalign(GTK_LABEL(lbl_info), 0);
+  gtk_box_pack_start(GTK_BOX(content), lbl_info, FALSE, FALSE, 10);
+
+  // Submission content frame
+  GtkWidget *frame = gtk_frame_new("Noi dung bai lam");
+  gtk_box_pack_start(GTK_BOX(content), frame, TRUE, TRUE, 10);
+
+  GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scroll), 150);
+  gtk_container_add(GTK_CONTAINER(frame), scroll);
+
+  GtkWidget *text_view = gtk_text_view_new();
+  gtk_text_view_set_editable(GTK_TEXT_VIEW(text_view), FALSE);
+  gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(text_view), GTK_WRAP_WORD);
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
+  gtk_text_buffer_set_text(buffer, sub.content.c_str(), -1);
+  gtk_container_add(GTK_CONTAINER(scroll), text_view);
+
+  // Audio URL if available
+  if (!sub.audioUrl.empty()) {
+    GtkWidget *audio_lbl = gtk_label_new(NULL);
+    std::string audio_info = "<i>Audio URL: " + sub.audioUrl + "</i>";
+    gtk_label_set_markup(GTK_LABEL(audio_lbl), audio_info.c_str());
+    gtk_box_pack_start(GTK_BOX(content), audio_lbl, FALSE, FALSE, 5);
+  }
+
+  // Score input
+  GtkWidget *score_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+  gtk_box_pack_start(GTK_BOX(content), score_box, FALSE, FALSE, 10);
+  gtk_box_pack_start(GTK_BOX(score_box), gtk_label_new("Diem (0-100):"), FALSE, FALSE, 0);
+  GtkWidget *entry_score = gtk_spin_button_new_with_range(0, 100, 1);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(entry_score), 70);
+  gtk_box_pack_start(GTK_BOX(score_box), entry_score, FALSE, FALSE, 0);
+
+  // Feedback text
+  gtk_box_pack_start(GTK_BOX(content), gtk_label_new("Nhan xet:"), FALSE, FALSE, 5);
+  GtkWidget *entry_feedback = gtk_entry_new();
+  gtk_entry_set_placeholder_text(GTK_ENTRY(entry_feedback), "Nhap nhan xet cho hoc sinh...");
+  gtk_box_pack_start(GTK_BOX(content), entry_feedback, FALSE, FALSE, 5);
+
+  gtk_widget_show_all(dialog);
+
+  if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+    int score = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(entry_score));
+    const char *feedback = gtk_entry_get_text(GTK_ENTRY(entry_feedback));
+    std::string feedbackStr = feedback ? feedback : "Good work!";
+    if (feedbackStr.empty()) feedbackStr = "Good work!";
+
+    // Send review request
+    std::string json = "{\"messageType\":\"REVIEW_EXERCISE_REQUEST\", \"sessionToken\":\"" +
+                       sessionToken + "\", \"payload\":{\"submissionId\":\"" +
+                       sub.submissionId + "\", \"score\":" + std::to_string(score) +
+                       ", \"feedback\":\"" + escape_json(feedbackStr) + "\"}}";
+
+    if (sendMessage(json)) {
+      std::string response = waitForResponse(3000);
+      GtkWidget *msg;
+      if (response.find("\"status\":\"success\"") != std::string::npos) {
+        msg = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_MODAL,
+                                     GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
+                                     "Da gui phan hoi thanh cong!");
+      } else {
+        msg = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_MODAL,
+                                     GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+                                     "Loi khi gui phan hoi!");
+      }
+      gtk_dialog_run(GTK_DIALOG(msg));
+      gtk_widget_destroy(msg);
+    }
+  }
+
+  gtk_widget_destroy(dialog);
+}
+
+void show_grading_dialog() {
+  g_pending_submissions.clear();
+
+  // Request pending submissions
+  std::string jsonRequest = "{\"messageType\":\"GET_PENDING_REVIEWS_REQUEST\", \"sessionToken\":\"" +
+                            sessionToken + "\", \"payload\":{}}";
+
+  GtkWidget *loading = gtk_message_dialog_new(
+      GTK_WINDOW(window), GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_NONE,
+      "Dang tai danh sach bai can cham...");
+  gtk_widget_show_now(loading);
+  while (gtk_events_pending()) gtk_main_iteration();
+
+  if (!sendMessage(jsonRequest)) {
+    gtk_widget_destroy(loading);
+    GtkWidget *error = gtk_message_dialog_new(
+        GTK_WINDOW(window), GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+        "Khong the ket noi den server");
+    gtk_dialog_run(GTK_DIALOG(error));
+    gtk_widget_destroy(error);
+    return;
+  }
+
+  std::string response = waitForResponse(5000);
+  gtk_widget_destroy(loading);
+
+  // Parse response
+  if (response.find("\"status\":\"success\"") == std::string::npos) {
+    GtkWidget *error = gtk_message_dialog_new(
+        GTK_WINDOW(window), GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+        "Loi khi lay danh sach bai can cham");
+    gtk_dialog_run(GTK_DIALOG(error));
+    gtk_widget_destroy(error);
+    return;
+  }
+
+  // Parse submissions array
+  std::regex re_submissions("\"submissions\"\\s*:\\s*\\[([^\\]]*)\\]");
+  std::smatch match;
+  std::string submissionsData;
+  if (std::regex_search(response, match, re_submissions) && match.size() > 1) {
+    submissionsData = match.str(1);
+  }
+
+  // Parse individual submissions
+  std::regex re_sub("\\{[^{}]*\\}");
+  std::sregex_iterator it(submissionsData.begin(), submissionsData.end(), re_sub);
+  std::sregex_iterator end;
+
+  while (it != end) {
+    std::string subJson = it->str();
+    PendingSubmissionData sub;
+    sub.submissionId = getJsonValue(subJson, "submissionId");
+    sub.studentName = getJsonValue(subJson, "studentName");
+    sub.exerciseTitle = getJsonValue(subJson, "exerciseTitle");
+    sub.exerciseType = getJsonValue(subJson, "exerciseType");
+    sub.content = getJsonValue(subJson, "content");
+    sub.audioUrl = getJsonValue(subJson, "audioUrl");
+
+    if (!sub.submissionId.empty()) {
+      g_pending_submissions.push_back(sub);
+    }
+    ++it;
+  }
+
+  // Create main dialog
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(
+      "Cham bai hoc sinh", GTK_WINDOW(window), GTK_DIALOG_MODAL,
+      "Dong", GTK_RESPONSE_CLOSE, NULL);
+  gtk_window_set_default_size(GTK_WINDOW(dialog), 600, 500);
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
+  gtk_box_pack_start(GTK_BOX(content), scrolled, TRUE, TRUE, 5);
+
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+  gtk_container_set_border_width(GTK_CONTAINER(vbox), 10);
+  gtk_container_add(GTK_CONTAINER(scrolled), vbox);
+
+  GtkWidget *title = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(title), "<b><big>Bai tap cho cham diem</big></b>");
+  gtk_box_pack_start(GTK_BOX(vbox), title, FALSE, FALSE, 10);
+
+  if (g_pending_submissions.empty()) {
+    GtkWidget *empty = gtk_label_new("Khong co bai tap nao can cham.");
+    gtk_box_pack_start(GTK_BOX(vbox), empty, FALSE, FALSE, 20);
+  } else {
+    for (size_t i = 0; i < g_pending_submissions.size(); i++) {
+      const auto& sub = g_pending_submissions[i];
+
+      GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+      gtk_box_pack_start(GTK_BOX(vbox), row, FALSE, FALSE, 5);
+
+      std::string label = sub.studentName + " - " + sub.exerciseTitle;
+      GtkWidget *lbl = gtk_label_new(label.c_str());
+      gtk_label_set_xalign(GTK_LABEL(lbl), 0);
+      gtk_box_pack_start(GTK_BOX(row), lbl, TRUE, TRUE, 0);
+
+      GtkWidget *btn = gtk_button_new_with_label("Cham bai");
+      g_signal_connect(btn, "clicked", G_CALLBACK(on_grade_button_clicked),
+                       GINT_TO_POINTER(i));
+      gtk_box_pack_start(GTK_BOX(row), btn, FALSE, FALSE, 0);
+    }
+  }
+
+  gtk_widget_show_all(dialog);
+  gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+}
+
+// Student menu button handler
+void on_student_menu_btn_clicked(GtkWidget *widget, gpointer data) {
   int choice = GPOINTER_TO_INT(data);
   switch (choice) {
   case 0:
@@ -2880,6 +3114,25 @@ void on_menu_btn_clicked(GtkWidget *widget, gpointer data) {
   }
 }
 
+// Teacher menu button handler
+void on_teacher_menu_btn_clicked(GtkWidget *widget, gpointer data) {
+  int choice = GPOINTER_TO_INT(data);
+  switch (choice) {
+  case 0:
+    show_chat_dialog();
+    break;
+  case 1:
+    show_grading_dialog();
+    break;
+  case 2:
+    show_voice_call_dialog();
+    break;
+  case 3:
+    gtk_main_quit();
+    break;
+  }
+}
+
 void show_main_menu() {
   if (vbox_login != NULL) {
     gtk_widget_destroy(vbox_login);
@@ -2890,19 +3143,37 @@ void show_main_menu() {
   gtk_container_set_border_width(GTK_CONTAINER(window), 20);
 
   GtkWidget *lbl = gtk_label_new(NULL);
-  gtk_label_set_markup(
-      GTK_LABEL(lbl),
-      "<span size='x-large' weight='bold'>English Learning App</span>");
+  if (isTeacherRole()) {
+    gtk_label_set_markup(
+        GTK_LABEL(lbl),
+        "<span size='x-large' weight='bold'>English Learning - Giao vien</span>");
+  } else {
+    gtk_label_set_markup(
+        GTK_LABEL(lbl),
+        "<span size='x-large' weight='bold'>English Learning App</span>");
+  }
   gtk_box_pack_start(GTK_BOX(vbox_menu), lbl, FALSE, FALSE, 10);
 
-  const char *buttons[] = {"1. Chọn cấp độ", "2. Học bài", "3. Làm bài thi",
-                           "4. Làm bài tập", "5. Chat",   "6. Game",
-                           "7. Voice Call",  "8. Xem phản hồi", "Thoát"};
-  for (int i = 0; i < 9; i++) {
-    GtkWidget *btn = gtk_button_new_with_label(buttons[i]);
-    g_signal_connect(btn, "clicked", G_CALLBACK(on_menu_btn_clicked),
-                     GINT_TO_POINTER(i));
-    gtk_box_pack_start(GTK_BOX(vbox_menu), btn, FALSE, FALSE, 5);
+  if (isStudentRole()) {
+    // Student menu
+    const char *buttons[] = {"1. Chon cap do", "2. Hoc bai", "3. Lam bai thi",
+                             "4. Lam bai tap", "5. Chat",   "6. Game",
+                             "7. Voice Call",  "8. Xem phan hoi", "Thoat"};
+    for (int i = 0; i < 9; i++) {
+      GtkWidget *btn = gtk_button_new_with_label(buttons[i]);
+      g_signal_connect(btn, "clicked", G_CALLBACK(on_student_menu_btn_clicked),
+                       GINT_TO_POINTER(i));
+      gtk_box_pack_start(GTK_BOX(vbox_menu), btn, FALSE, FALSE, 5);
+    }
+  } else {
+    // Teacher menu
+    const char *buttons[] = {"1. Chat", "2. Cham bai", "3. Voice Call", "Thoat"};
+    for (int i = 0; i < 4; i++) {
+      GtkWidget *btn = gtk_button_new_with_label(buttons[i]);
+      g_signal_connect(btn, "clicked", G_CALLBACK(on_teacher_menu_btn_clicked),
+                       GINT_TO_POINTER(i));
+      gtk_box_pack_start(GTK_BOX(vbox_menu), btn, FALSE, FALSE, 5);
+    }
   }
   gtk_widget_show_all(window);
 }
@@ -2930,6 +3201,13 @@ static void on_login_clicked(GtkWidget *widget, gpointer data) {
       std::regex re_level("\"level\"\\s*:\\s*\"([^\"]+)\"");
       if (std::regex_search(response, match, re_level) && match.size() > 1)
         currentLevel = match.str(1);
+
+      // Parse role
+      std::regex re_role("\"role\"\\s*:\\s*\"([^\"]+)\"");
+      if (std::regex_search(response, match, re_role) && match.size() > 1)
+        currentRole = match.str(1);
+      else
+        currentRole = "student";  // Default fallback
 
       show_main_menu();
     } else {

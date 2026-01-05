@@ -1559,7 +1559,7 @@ std::string handleLoginV2(const std::string& json, int clientSocket) {
                    R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
                    R"(,"payload":{"status":"success","message":"Login successfully","data":{"userId":")" +
                    data.userId + R"(","fullname":")" + escapeJson(data.fullname) + R"(","email":")" +
-                   data.email + R"(","level":")" + data.level + R"(","sessionToken":")" +
+                   data.email + R"(","level":")" + data.level + R"(","role":")" + data.role + R"(","sessionToken":")" +
                    data.sessionToken + R"(","expiresAt":)" + std::to_string(data.expiresAt) + R"(}}})";
     }
 
