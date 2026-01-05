@@ -3,6 +3,7 @@
 
 #include <string>
 #include <iostream>
+#include "include/protocol/json_parser.h"
 
 // --- BIẾN DÙNG CHUNG (Shared Variables) ---
 // Khai báo extern để gui_main.cpp hiểu là các biến này đang nằm bên client.cpp
@@ -15,7 +16,13 @@ extern bool running;             // Trạng thái chương trình
 bool connectToServer(const char* ip, int port);
 bool sendMessage(const std::string& message);
 std::string waitForResponse(int timeoutMs = 3000);
-void receiveThreadFunc(); 
-std::string getJsonValue(const std::string& json, const std::string& key);
+void receiveThreadFunc();
+
+// Use namespace-qualified JSON functions from protocol library
+using english_learning::protocol::getJsonValue;
+using english_learning::protocol::getJsonObject;
+using english_learning::protocol::getJsonArray;
+using english_learning::protocol::parseJsonArray;
+using english_learning::protocol::escapeJson;
 
 #endif
