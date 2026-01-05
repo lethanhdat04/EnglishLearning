@@ -98,6 +98,15 @@ static bool isStudentRole() {
     return currentRole == "student";
 }
 
+static bool isAdminRole() {
+    return currentRole == "admin";
+}
+
+// Admin Game Management declarations
+void show_admin_game_management();
+void show_add_game_dialog();
+void on_admin_menu_btn_clicked(GtkWidget *widget, gpointer data);
+
 // Escape JSON for small payloads
 static std::string escape_json(const std::string &s) {
   std::string out;
@@ -3279,6 +3288,376 @@ void on_teacher_menu_btn_clicked(GtkWidget *widget, gpointer data) {
   }
 }
 
+// =========================================================
+// ADMIN GAME MANAGEMENT
+// =========================================================
+
+// Global widgets for add game dialog
+static GtkWidget *combo_game_type = NULL;
+static GtkWidget *entry_game_title = NULL;
+static GtkWidget *entry_game_description = NULL;
+static GtkWidget *combo_game_level = NULL;
+static GtkWidget *entry_game_time = NULL;
+static GtkWidget *text_game_pairs = NULL;
+
+// Send ADD_GAME_REQUEST to server
+static void on_add_game_submit(GtkWidget *widget, gpointer dialog) {
+  (void)widget;
+
+  const char *gameType = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(combo_game_type));
+  const char *title = gtk_entry_get_text(GTK_ENTRY(entry_game_title));
+  const char *description = gtk_entry_get_text(GTK_ENTRY(entry_game_description));
+  const char *level = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(combo_game_level));
+  const char *timeStr = gtk_entry_get_text(GTK_ENTRY(entry_game_time));
+
+  // Get pairs from text view
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_game_pairs));
+  GtkTextIter start, end;
+  gtk_text_buffer_get_bounds(buffer, &start, &end);
+  char *pairsText = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+
+  if (!gameType || !title || strlen(title) == 0 || !level) {
+    GtkWidget *msg = gtk_message_dialog_new(GTK_WINDOW(dialog),
+        GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+        "Vui long dien day du thong tin!");
+    gtk_dialog_run(GTK_DIALOG(msg));
+    gtk_widget_destroy(msg);
+    g_free(pairsText);
+    return;
+  }
+
+  // Parse pairs based on game type
+  // Format: line by line, each line is "left|right" or "word|imageUrl"
+  std::string pairsJson = "[";
+  std::string pairsStr(pairsText);
+  std::istringstream stream(pairsStr);
+  std::string line;
+  bool first = true;
+
+  while (std::getline(stream, line)) {
+    if (line.empty()) continue;
+    size_t delimPos = line.find('|');
+    if (delimPos == std::string::npos) continue;
+
+    std::string left = line.substr(0, delimPos);
+    std::string right = line.substr(delimPos + 1);
+
+    // Trim whitespace
+    left.erase(0, left.find_first_not_of(" \t"));
+    left.erase(left.find_last_not_of(" \t") + 1);
+    right.erase(0, right.find_first_not_of(" \t"));
+    right.erase(right.find_last_not_of(" \t") + 1);
+
+    if (!first) pairsJson += ",";
+    first = false;
+
+    if (strcmp(gameType, "picture_match") == 0) {
+      pairsJson += "{\"word\":\"" + escape_json(left) + "\",\"imageUrl\":\"" + escape_json(right) + "\"}";
+    } else {
+      pairsJson += "{\"left\":\"" + escape_json(left) + "\",\"right\":\"" + escape_json(right) + "\"}";
+    }
+  }
+  pairsJson += "]";
+
+  g_free(pairsText);
+
+  int timeLimit = strlen(timeStr) > 0 ? atoi(timeStr) : 120;
+
+  // Build JSON request
+  std::string jsonRequest = "{\"messageType\":\"ADD_GAME_REQUEST\",\"sessionToken\":\"" +
+      sessionToken + "\",\"payload\":{" +
+      "\"gameType\":\"" + std::string(gameType) + "\"," +
+      "\"title\":\"" + escape_json(title) + "\"," +
+      "\"description\":\"" + escape_json(description) + "\"," +
+      "\"level\":\"" + std::string(level) + "\"," +
+      "\"timeLimit\":" + std::to_string(timeLimit) + "," +
+      "\"maxScore\":100," +
+      "\"pairs\":" + pairsJson + "}}";
+
+  std::cout << "[DEBUG] Sending ADD_GAME_REQUEST: " << jsonRequest << std::endl;
+
+  sendMessage(jsonRequest);
+
+  // Wait for response
+  usleep(500000);
+
+  std::string response;
+  {
+    std::lock_guard<std::mutex> lock(responseMutex);
+    response = lastResponse;
+    lastResponse.clear();
+  }
+
+  std::string status = getJsonValue(response, "status");
+  std::string message = getJsonValue(response, "message");
+
+  GtkWidget *msg = gtk_message_dialog_new(GTK_WINDOW(dialog),
+      GTK_DIALOG_MODAL,
+      status == "success" ? GTK_MESSAGE_INFO : GTK_MESSAGE_ERROR,
+      GTK_BUTTONS_OK,
+      "%s", message.empty() ? (status == "success" ? "Them game thanh cong!" : "Loi khi them game") : message.c_str());
+  gtk_dialog_run(GTK_DIALOG(msg));
+  gtk_widget_destroy(msg);
+
+  if (status == "success") {
+    gtk_widget_destroy(GTK_WIDGET(dialog));
+  }
+}
+
+// Show dialog to add new game
+void show_add_game_dialog() {
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(
+      "Them Game Moi",
+      GTK_WINDOW(window),
+      GTK_DIALOG_MODAL,
+      "_Huy", GTK_RESPONSE_CANCEL,
+      NULL);
+  gtk_window_set_default_size(GTK_WINDOW(dialog), 500, 600);
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  gtk_container_set_border_width(GTK_CONTAINER(content), 15);
+
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
+  gtk_box_pack_start(GTK_BOX(content), grid, TRUE, TRUE, 0);
+
+  int row = 0;
+
+  // Game Type
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Loai game:"), 0, row, 1, 1);
+  combo_game_type = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo_game_type), "word_match");
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo_game_type), "sentence_match");
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo_game_type), "picture_match");
+  gtk_combo_box_set_active(GTK_COMBO_BOX(combo_game_type), 0);
+  gtk_grid_attach(GTK_GRID(grid), combo_game_type, 1, row++, 1, 1);
+
+  // Title
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Tieu de:"), 0, row, 1, 1);
+  entry_game_title = gtk_entry_new();
+  gtk_entry_set_placeholder_text(GTK_ENTRY(entry_game_title), "VD: Basic Vocabulary");
+  gtk_widget_set_hexpand(entry_game_title, TRUE);
+  gtk_grid_attach(GTK_GRID(grid), entry_game_title, 1, row++, 1, 1);
+
+  // Description
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Mo ta:"), 0, row, 1, 1);
+  entry_game_description = gtk_entry_new();
+  gtk_entry_set_placeholder_text(GTK_ENTRY(entry_game_description), "VD: Match English words with Vietnamese");
+  gtk_widget_set_hexpand(entry_game_description, TRUE);
+  gtk_grid_attach(GTK_GRID(grid), entry_game_description, 1, row++, 1, 1);
+
+  // Level
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Cap do:"), 0, row, 1, 1);
+  combo_game_level = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo_game_level), "beginner");
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo_game_level), "intermediate");
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo_game_level), "advanced");
+  gtk_combo_box_set_active(GTK_COMBO_BOX(combo_game_level), 0);
+  gtk_grid_attach(GTK_GRID(grid), combo_game_level, 1, row++, 1, 1);
+
+  // Time limit
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Thoi gian (giay):"), 0, row, 1, 1);
+  entry_game_time = gtk_entry_new();
+  gtk_entry_set_text(GTK_ENTRY(entry_game_time), "120");
+  gtk_grid_attach(GTK_GRID(grid), entry_game_time, 1, row++, 1, 1);
+
+  // Pairs instruction
+  GtkWidget *lbl_instruction = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(lbl_instruction),
+      "<b>Nhap cac cap (moi dong 1 cap):</b>\n"
+      "<small>- Word/Sentence Match: tu_trai|tu_phai\n"
+      "- Picture Match: tu_vung|url_hinh_anh</small>");
+  gtk_widget_set_halign(lbl_instruction, GTK_ALIGN_START);
+  gtk_grid_attach(GTK_GRID(grid), lbl_instruction, 0, row++, 2, 1);
+
+  // Pairs text area
+  GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
+      GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_widget_set_size_request(scroll, -1, 200);
+
+  text_game_pairs = gtk_text_view_new();
+  gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(text_game_pairs), GTK_WRAP_WORD);
+
+  // Set example text based on game type
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_game_pairs));
+  gtk_text_buffer_set_text(buffer,
+      "Hello|Xin chao\n"
+      "Goodbye|Tam biet\n"
+      "Thank you|Cam on\n"
+      "Apple|Qua tao\n"
+      "Book|Quyen sach", -1);
+
+  gtk_container_add(GTK_CONTAINER(scroll), text_game_pairs);
+  gtk_grid_attach(GTK_GRID(grid), scroll, 0, row++, 2, 1);
+
+  // Submit button
+  GtkWidget *btn_submit = gtk_button_new_with_label("Them Game");
+  gtk_widget_set_margin_top(btn_submit, 10);
+  g_signal_connect(btn_submit, "clicked", G_CALLBACK(on_add_game_submit), dialog);
+  gtk_grid_attach(GTK_GRID(grid), btn_submit, 0, row++, 2, 1);
+
+  gtk_widget_show_all(dialog);
+  gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+}
+
+// Show game management UI with list of games
+void show_admin_game_management() {
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(
+      "Quan ly Game - Admin",
+      GTK_WINDOW(window),
+      GTK_DIALOG_MODAL,
+      "_Dong", GTK_RESPONSE_CLOSE,
+      NULL);
+  gtk_window_set_default_size(GTK_WINDOW(dialog), 600, 500);
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  gtk_container_set_border_width(GTK_CONTAINER(content), 15);
+
+  // Title
+  GtkWidget *lbl_title = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(lbl_title), "<span size='large' weight='bold'>Quan ly Game</span>");
+  gtk_box_pack_start(GTK_BOX(content), lbl_title, FALSE, FALSE, 10);
+
+  // Buttons row
+  GtkWidget *hbox_buttons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+  gtk_box_pack_start(GTK_BOX(content), hbox_buttons, FALSE, FALSE, 5);
+
+  GtkWidget *btn_add = gtk_button_new_with_label("+ Them Game Moi");
+  g_signal_connect_swapped(btn_add, "clicked", G_CALLBACK(show_add_game_dialog), NULL);
+  gtk_box_pack_start(GTK_BOX(hbox_buttons), btn_add, FALSE, FALSE, 0);
+
+  // Request game list
+  std::string jsonRequest = "{\"messageType\":\"GET_GAME_LIST_REQUEST\",\"sessionToken\":\"" +
+      sessionToken + "\",\"payload\":{\"gameType\":\"all\",\"level\":\"all\"}}";
+  sendMessage(jsonRequest);
+
+  usleep(500000);
+
+  std::string response;
+  {
+    std::lock_guard<std::mutex> lock(responseMutex);
+    response = lastResponse;
+    lastResponse.clear();
+  }
+
+  // Create scrolled list of games
+  GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
+      GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_widget_set_vexpand(scroll, TRUE);
+  gtk_box_pack_start(GTK_BOX(content), scroll, TRUE, TRUE, 10);
+
+  GtkWidget *list_box = gtk_list_box_new();
+  gtk_container_add(GTK_CONTAINER(scroll), list_box);
+
+  // Parse and display games
+  std::string dataObj = getJsonObject(response, "data");
+  std::string gamesArray = getJsonArray(dataObj, "games");
+  std::vector<std::string> games = parseJsonArray(gamesArray);
+
+  for (const std::string &gameJson : games) {
+    std::string gameId = getJsonValue(gameJson, "gameId");
+    std::string title = getJsonValue(gameJson, "title");
+    std::string gameType = getJsonValue(gameJson, "gameType");
+    std::string level = getJsonValue(gameJson, "level");
+    std::string description = getJsonValue(gameJson, "description");
+
+    GtkWidget *row = gtk_list_box_row_new();
+    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_container_set_border_width(GTK_CONTAINER(hbox), 10);
+    gtk_container_add(GTK_CONTAINER(row), hbox);
+
+    // Game info
+    GtkWidget *vbox_info = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    gtk_box_pack_start(GTK_BOX(hbox), vbox_info, TRUE, TRUE, 0);
+
+    GtkWidget *lbl_name = gtk_label_new(NULL);
+    std::string markup = "<b>" + title + "</b> <small>(" + gameType + ")</small>";
+    gtk_label_set_markup(GTK_LABEL(lbl_name), markup.c_str());
+    gtk_widget_set_halign(lbl_name, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(vbox_info), lbl_name, FALSE, FALSE, 0);
+
+    GtkWidget *lbl_detail = gtk_label_new(NULL);
+    std::string detail = "<small>ID: " + gameId + " | Level: " + level + "</small>";
+    gtk_label_set_markup(GTK_LABEL(lbl_detail), detail.c_str());
+    gtk_widget_set_halign(lbl_detail, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(vbox_info), lbl_detail, FALSE, FALSE, 0);
+
+    if (!description.empty()) {
+      GtkWidget *lbl_desc = gtk_label_new(description.c_str());
+      gtk_widget_set_halign(lbl_desc, GTK_ALIGN_START);
+      gtk_label_set_line_wrap(GTK_LABEL(lbl_desc), TRUE);
+      gtk_box_pack_start(GTK_BOX(vbox_info), lbl_desc, FALSE, FALSE, 0);
+    }
+
+    // Delete button
+    GtkWidget *btn_delete = gtk_button_new_with_label("Xoa");
+    gtk_widget_set_valign(btn_delete, GTK_ALIGN_CENTER);
+    // Store gameId in button for delete handler
+    g_object_set_data_full(G_OBJECT(btn_delete), "gameId", g_strdup(gameId.c_str()), g_free);
+    g_signal_connect(btn_delete, "clicked", G_CALLBACK(+[](GtkWidget *btn, gpointer) {
+      const char *gId = (const char *)g_object_get_data(G_OBJECT(btn), "gameId");
+
+      GtkWidget *confirm = gtk_message_dialog_new(NULL,
+          GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
+          "Ban co chac muon xoa game nay?");
+      int result = gtk_dialog_run(GTK_DIALOG(confirm));
+      gtk_widget_destroy(confirm);
+
+      if (result == GTK_RESPONSE_YES) {
+        std::string delRequest = "{\"messageType\":\"DELETE_GAME_REQUEST\",\"sessionToken\":\"" +
+            sessionToken + "\",\"payload\":{\"gameId\":\"" + std::string(gId) + "\"}}";
+        sendMessage(delRequest);
+
+        usleep(300000);
+        GtkWidget *msg = gtk_message_dialog_new(NULL,
+            GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
+            "Da xoa game!");
+        gtk_dialog_run(GTK_DIALOG(msg));
+        gtk_widget_destroy(msg);
+      }
+    }), NULL);
+    gtk_box_pack_end(GTK_BOX(hbox), btn_delete, FALSE, FALSE, 0);
+
+    gtk_list_box_insert(GTK_LIST_BOX(list_box), row, -1);
+  }
+
+  if (games.empty()) {
+    GtkWidget *lbl_empty = gtk_label_new("Chua co game nao. Hay them game moi!");
+    gtk_box_pack_start(GTK_BOX(content), lbl_empty, FALSE, FALSE, 10);
+  }
+
+  gtk_widget_show_all(dialog);
+  gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+}
+
+// Admin menu button handler
+void on_admin_menu_btn_clicked(GtkWidget *widget, gpointer data) {
+  (void)widget;
+  int choice = GPOINTER_TO_INT(data);
+  switch (choice) {
+  case 0:
+    show_chat_dialog();
+    break;
+  case 1:
+    show_grading_dialog();
+    break;
+  case 2:
+    show_voice_call_dialog();
+    break;
+  case 3:
+    show_admin_game_management();
+    break;
+  case 4:
+    gtk_main_quit();
+    break;
+  }
+}
+
 void show_main_menu() {
   if (vbox_login != NULL) {
     gtk_widget_destroy(vbox_login);
@@ -3289,7 +3668,11 @@ void show_main_menu() {
   gtk_container_set_border_width(GTK_CONTAINER(window), 20);
 
   GtkWidget *lbl = gtk_label_new(NULL);
-  if (isTeacherRole()) {
+  if (isAdminRole()) {
+    gtk_label_set_markup(
+        GTK_LABEL(lbl),
+        "<span size='x-large' weight='bold'>English Learning - Admin</span>");
+  } else if (isTeacherRole()) {
     gtk_label_set_markup(
         GTK_LABEL(lbl),
         "<span size='x-large' weight='bold'>English Learning - Giao vien</span>");
@@ -3308,6 +3691,16 @@ void show_main_menu() {
     for (int i = 0; i < 9; i++) {
       GtkWidget *btn = gtk_button_new_with_label(buttons[i]);
       g_signal_connect(btn, "clicked", G_CALLBACK(on_student_menu_btn_clicked),
+                       GINT_TO_POINTER(i));
+      gtk_box_pack_start(GTK_BOX(vbox_menu), btn, FALSE, FALSE, 5);
+    }
+  } else if (isAdminRole()) {
+    // Admin menu - includes game management
+    const char *buttons[] = {"1. Chat", "2. Cham bai", "3. Voice Call",
+                             "4. Quan ly Game", "Thoat"};
+    for (int i = 0; i < 5; i++) {
+      GtkWidget *btn = gtk_button_new_with_label(buttons[i]);
+      g_signal_connect(btn, "clicked", G_CALLBACK(on_admin_menu_btn_clicked),
                        GINT_TO_POINTER(i));
       gtk_box_pack_start(GTK_BOX(vbox_menu), btn, FALSE, FALSE, 5);
     }

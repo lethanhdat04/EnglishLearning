@@ -14,7 +14,9 @@
       "Bash(find:*)",
       "Bash(xargs cat:*)",
       "Bash(cat:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(ss:*)",
+      "Bash(nc:*)"
     ],
     "deny": [],
     "ask": []
