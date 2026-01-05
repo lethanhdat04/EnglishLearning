@@ -146,42 +146,39 @@ static void play_video(const std::string &url) {
   }
 }
 
+
 // Play audio using available audio players
 static void play_audio(const std::string &url) {
-  if (url.empty()) {
-    GtkWidget *msg = gtk_message_dialog_new(
-        NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
-        "No audio available for this lesson.");
-    gtk_dialog_run(GTK_DIALOG(msg));
-    gtk_widget_destroy(msg);
-    return;
-  }
+  if (url.empty()) return;
 
   g_print("[AUDIO] Playing: %s\n", url.c_str());
 
-  std::string command;
-  if (url.find("http://") == 0 || url.find("https://") == 0) {
-    // For URLs, use mpv or vlc (audio-only mode)
-    command = "(which mpv && mpv --no-video --no-terminal \"" + url +
-              "\") || (which vlc && cvlc --play-and-exit \"" + url +
-              "\") || xdg-open \"" + url + "\" &";
-  } else {
-    // Local file - try paplay (PulseAudio), aplay, mpv, or vlc
-    command = "(which paplay && paplay \"" + url +
-              "\") || (which aplay && aplay \"" + url +
-              "\") || (which mpv && mpv --no-video --no-terminal \"" + url +
-              "\") || (which vlc && cvlc --play-and-exit \"" + url + "\") &";
-  }
+  char *argv[] = {
+      (char *)"mpv",
+      (char *)"--no-video",
+      (char *)"--no-terminal",
+      (char *)url.c_str(),
+      NULL};
 
-  int result = system(command.c_str());
-  if (result != 0) {
-    GtkWidget *msg = gtk_message_dialog_new(
-        NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
-        "Failed to play audio.\nFile: %s", url.c_str());
-    gtk_dialog_run(GTK_DIALOG(msg));
-    gtk_widget_destroy(msg);
+  GError *error = NULL;
+
+  gboolean ok = g_spawn_async(
+      NULL,          // inherit cwd
+      argv,          // argv
+      NULL,          // inherit env (QUAN TRỌNG)
+      G_SPAWN_SEARCH_PATH,
+      NULL,
+      NULL,
+      NULL,
+      &error);
+
+  if (!ok) {
+    g_printerr("Failed to spawn mpv: %s\n", error->message);
+    g_error_free(error);
   }
 }
+
+
 
 // Callback for video button
 static void on_play_video_clicked(GtkWidget *widget, gpointer data) {

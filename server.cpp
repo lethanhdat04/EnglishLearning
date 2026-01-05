@@ -257,8 +257,8 @@ void initSampleData() {
     lesson1.topic = "grammar";
     lesson1.level = "beginner";
     lesson1.duration = 30;
-    lesson1.videoUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";  // Sample video
-    lesson1.audioUrl = "/usr/share/sounds/freedesktop/stereo/complete.oga";  // Sample system audio
+    lesson1.videoUrl = "/mnt/c/Users/20225804/Videos/1.mp4";  // Sample video
+    lesson1.audioUrl = "/mnt/c/Users/20225804/Music/audio.mp3";  // Sample system audio
     lesson1.textContent = R"(
 ========================================
         PRESENT SIMPLE TENSE
@@ -339,8 +339,8 @@ V Does she speak English?
     lesson2.topic = "vocabulary";
     lesson2.level = "beginner";
     lesson2.duration = 25;
-    lesson2.videoUrl = "";  // No video for this lesson
-    lesson2.audioUrl = "/usr/share/sounds/freedesktop/stereo/message.oga";  // Audio pronunciation
+    lesson2.videoUrl = "/mnt/c/Users/20225804/Videos/2.mp4";  // Daily vocabulary video
+    lesson2.audioUrl = "/mnt/c/Users/20225804/Music/audio.mp3";   // Audio pronunciation
     lesson2.textContent = R"(
 ========================================
      COMMON DAILY VOCABULARY
@@ -434,8 +434,8 @@ V Does she speak English?
     lesson3.topic = "listening";
     lesson3.level = "beginner";
     lesson3.duration = 20;
-    lesson3.videoUrl = "https://www.youtube.com/watch?v=JGwWNGJdvx8";  // English listening practice
-    lesson3.audioUrl = "/usr/share/sounds/freedesktop/stereo/dialog-information.oga";
+    lesson3.videoUrl = "/mnt/c/Users/20225804/Videos/3.mp4";  // English listening practice
+    lesson3.audioUrl = "/mnt/c/Users/20225804/Music/audio.mp3"; 
     lesson3.textContent = R"(
 ========================================
     INTRODUCTION TO LISTENING
