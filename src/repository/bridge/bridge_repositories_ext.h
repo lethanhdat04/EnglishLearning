@@ -394,6 +394,121 @@ public:
         return count;
     }
 
+    // New methods for homework/practice workflow
+    std::vector<core::Exercise> findExercisesByLevelAndType(
+        const std::string& level, const std::string& type) const override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::vector<core::Exercise> result;
+        for (const auto& pair : exercises_) {
+            bool matchLevel = level.empty() || pair.second.level == level;
+            bool matchType = type.empty() || pair.second.exerciseType == type;
+            if (matchLevel && matchType) {
+                result.push_back(pair.second);
+            }
+        }
+        return result;
+    }
+
+    std::vector<core::ExerciseSubmission> findDraftsByUser(
+        const std::string& userId) const override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::vector<core::ExerciseSubmission> result;
+        for (const auto& sub : submissions_) {
+            if (sub.userId == userId && sub.isDraft()) {
+                result.push_back(sub);
+            }
+        }
+        return result;
+    }
+
+    std::optional<core::ExerciseSubmission> findDraftByUserAndExercise(
+        const std::string& userId, const std::string& exerciseId) const override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (const auto& sub : submissions_) {
+            if (sub.userId == userId && sub.exerciseId == exerciseId && sub.isDraft()) {
+                return sub;
+            }
+        }
+        return std::nullopt;
+    }
+
+    bool reviewSubmissionWithScores(const std::string& submissionId,
+                                    const std::string& teacherId,
+                                    const std::string& feedback,
+                                    const core::ScoreBreakdown& scores,
+                                    int64_t reviewedAt) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (auto& sub : submissions_) {
+            if (sub.submissionId == submissionId) {
+                sub.setReview(teacherId, feedback, scores, reviewedAt);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool saveDraft(const std::string& submissionId,
+                   const std::string& content,
+                   const std::string& audioUrl,
+                   int64_t updatedAt) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (auto& sub : submissions_) {
+            if (sub.submissionId == submissionId) {
+                sub.content = content;
+                sub.audioUrl = audioUrl;
+                sub.status = core::SubmissionStatusStr::DRAFT;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool submitForReview(const std::string& submissionId, int64_t submittedAt) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (auto& sub : submissions_) {
+            if (sub.submissionId == submissionId) {
+                sub.submit(submittedAt);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool removeSubmission(const std::string& submissionId) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = std::remove_if(submissions_.begin(), submissions_.end(),
+            [&submissionId](const core::ExerciseSubmission& sub) {
+                return sub.submissionId == submissionId;
+            });
+        if (it != submissions_.end()) {
+            submissions_.erase(it, submissions_.end());
+            return true;
+        }
+        return false;
+    }
+
+    size_t countDrafts(const std::string& userId) const override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        size_t count = 0;
+        for (const auto& sub : submissions_) {
+            if (sub.userId == userId && sub.isDraft()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    int getAttemptCount(const std::string& userId, const std::string& exerciseId) const override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        int count = 0;
+        for (const auto& sub : submissions_) {
+            if (sub.userId == userId && sub.exerciseId == exerciseId) {
+                count++;
+            }
+        }
+        return count;
+    }
+
 private:
     std::map<std::string, core::Exercise>& exercises_;
     std::vector<core::ExerciseSubmission>& submissions_;

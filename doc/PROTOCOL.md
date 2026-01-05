@@ -1,7 +1,12 @@
 # English Learning Application Protocol Specification
 
-Version: 1.1
-Last Updated: 2025-12-28
+Version: 1.2
+Last Updated: 2026-01-05
+
+**Changelog v1.2:**
+- Added Homework/Practice workflow (GET_EXERCISE_LIST, SAVE_DRAFT, GET_MY_DRAFTS)
+- Added teacher submission review endpoints (GET_SUBMISSION_DETAIL, GET_REVIEW_STATISTICS)
+- Documented submission status flow (draft → pending_review → reviewed)
 
 ## Table of Contents
 
@@ -649,6 +654,237 @@ Example: `msg_42_85321`
 - Invalid session token
 - Exercise not found
 - Empty content
+
+---
+
+#### 3.4.3 Get Exercise List
+
+**Purpose**: Browse available exercises with optional filtering.
+
+**Request** (`GET_EXERCISE_LIST_REQUEST`):
+```json
+{
+  "messageType": "GET_EXERCISE_LIST_REQUEST",
+  "messageId": "msg_32_12372",
+  "timestamp": 1703721600000,
+  "sessionToken": "a1b2c3d4e5f6...64chars...",
+  "payload": {
+    "level": "intermediate",
+    "type": "paragraph_writing"
+  }
+}
+```
+
+**Response** (`GET_EXERCISE_LIST_RESPONSE`):
+```json
+{
+  "messageType": "GET_EXERCISE_LIST_RESPONSE",
+  "messageId": "msg_32_12372",
+  "timestamp": 1703721600100,
+  "payload": {
+    "status": "success",
+    "data": {
+      "exercises": [
+        {
+          "exerciseId": "ex_001",
+          "exerciseType": "paragraph_writing",
+          "title": "My Daily Routine",
+          "level": "intermediate",
+          "duration": 20
+        }
+      ],
+      "total": 1,
+      "filterLevel": "intermediate",
+      "filterType": "paragraph_writing"
+    }
+  }
+}
+```
+
+---
+
+#### 3.4.4 Save Draft
+
+**Purpose**: Save work-in-progress exercise as draft.
+
+**Request** (`SAVE_DRAFT_REQUEST`):
+```json
+{
+  "messageType": "SAVE_DRAFT_REQUEST",
+  "messageId": "msg_33_12373",
+  "timestamp": 1703721600000,
+  "sessionToken": "a1b2c3d4e5f6...64chars...",
+  "payload": {
+    "exerciseId": "ex_001",
+    "content": "Work in progress text...",
+    "audioUrl": ""
+  }
+}
+```
+
+**Response** (`SAVE_DRAFT_RESPONSE`):
+```json
+{
+  "messageType": "SAVE_DRAFT_RESPONSE",
+  "messageId": "msg_33_12373",
+  "timestamp": 1703721600100,
+  "payload": {
+    "status": "success",
+    "data": {
+      "submissionId": "sub_draft_001",
+      "status": "draft",
+      "createdAt": 1703721600100,
+      "message": "Draft saved successfully"
+    }
+  }
+}
+```
+
+---
+
+#### 3.4.5 Get My Drafts
+
+**Purpose**: Retrieve student's saved drafts.
+
+**Request** (`GET_MY_DRAFTS_REQUEST`):
+```json
+{
+  "messageType": "GET_MY_DRAFTS_REQUEST",
+  "messageId": "msg_34_12374",
+  "timestamp": 1703721600000,
+  "sessionToken": "a1b2c3d4e5f6...64chars...",
+  "payload": {}
+}
+```
+
+**Response** (`GET_MY_DRAFTS_RESPONSE`):
+```json
+{
+  "messageType": "GET_MY_DRAFTS_RESPONSE",
+  "messageId": "msg_34_12374",
+  "timestamp": 1703721600100,
+  "payload": {
+    "status": "success",
+    "data": {
+      "drafts": [
+        {
+          "submissionId": "sub_draft_001",
+          "exerciseId": "ex_001",
+          "exerciseTitle": "My Daily Routine",
+          "exerciseType": "paragraph_writing",
+          "content": "Work in progress...",
+          "createdAt": 1703721600100
+        }
+      ],
+      "total": 1
+    }
+  }
+}
+```
+
+---
+
+#### 3.4.6 Get Submission Detail (Teacher)
+
+**Purpose**: Get full submission details for review.
+
+**Request** (`GET_SUBMISSION_DETAIL_REQUEST`):
+```json
+{
+  "messageType": "GET_SUBMISSION_DETAIL_REQUEST",
+  "messageId": "msg_35_12375",
+  "timestamp": 1703721600000,
+  "sessionToken": "teacher_token...64chars...",
+  "payload": {
+    "submissionId": "sub_001"
+  }
+}
+```
+
+**Response** (`GET_SUBMISSION_DETAIL_RESPONSE`):
+```json
+{
+  "messageType": "GET_SUBMISSION_DETAIL_RESPONSE",
+  "messageId": "msg_35_12375",
+  "timestamp": 1703721600100,
+  "payload": {
+    "status": "success",
+    "data": {
+      "submission": {
+        "submissionId": "sub_001",
+        "exerciseId": "ex_001",
+        "exerciseType": "paragraph_writing",
+        "content": "Student's answer...",
+        "audioUrl": "",
+        "status": "pending_review",
+        "submittedAt": 1703721600000
+      },
+      "exercise": {
+        "title": "My Daily Routine",
+        "instructions": "Write about your daily routine",
+        "duration": 20
+      },
+      "student": {
+        "studentId": "user_001",
+        "studentName": "John Doe",
+        "studentEmail": "john@example.com"
+      }
+    }
+  }
+}
+```
+
+---
+
+#### 3.4.7 Get Review Statistics (Teacher)
+
+**Purpose**: Get teacher's review statistics.
+
+**Request** (`GET_REVIEW_STATISTICS_REQUEST`):
+```json
+{
+  "messageType": "GET_REVIEW_STATISTICS_REQUEST",
+  "messageId": "msg_36_12376",
+  "timestamp": 1703721600000,
+  "sessionToken": "teacher_token...64chars...",
+  "payload": {}
+}
+```
+
+**Response** (`GET_REVIEW_STATISTICS_RESPONSE`):
+```json
+{
+  "messageType": "GET_REVIEW_STATISTICS_RESPONSE",
+  "messageId": "msg_36_12376",
+  "timestamp": 1703721600100,
+  "payload": {
+    "status": "success",
+    "data": {
+      "statistics": {
+        "totalPending": 5,
+        "totalReviewed": 42,
+        "reviewedToday": 3,
+        "reviewedThisWeek": 15,
+        "averageScore": 78.5
+      }
+    }
+  }
+}
+```
+
+---
+
+#### Submission Status Flow
+
+```
+draft → pending_review → reviewed
+```
+
+| Status | Description |
+|--------|-------------|
+| `draft` | Student is working on it, not yet submitted |
+| `pending_review` | Submitted, waiting for teacher review |
+| `reviewed` | Teacher has provided feedback |
 
 ---
 

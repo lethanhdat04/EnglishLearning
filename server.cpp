@@ -19,6 +19,7 @@
 #include <mutex>
 #include <chrono>
 #include <sstream>
+#include <iomanip>
 #include <algorithm>
 #include <fstream>
 #include <ctime>
@@ -1174,6 +1175,81 @@ Instead of "important" -> crucial, vital, significant
     };
     ex4.duration = 25;
     exercises[ex4.exerciseId] = ex4;
+
+    // Exercise 5: Beginner Speaking - Introduce Yourself
+    Exercise ex5;
+    ex5.exerciseId = "ex_005";
+    ex5.exerciseType = "topic_speaking";
+    ex5.title = "Introduce Yourself";
+    ex5.description = "Practice basic self-introduction in English";
+    ex5.instructions = "Record a 1-2 minute introduction about yourself. Include your name, age, hobbies, and what you do.";
+    ex5.level = "beginner";
+    ex5.topic = "speaking";
+    ex5.topicDescription = "Introduce yourself:\n- Your name and where you're from\n- Your hobbies and interests\n- What you do (student, worker, etc.)\n- Your goals for learning English";
+    ex5.duration = 3;
+    exercises[ex5.exerciseId] = ex5;
+
+    // Exercise 6: Intermediate Writing - Opinion Essay
+    Exercise ex6;
+    ex6.exerciseId = "ex_006";
+    ex6.exerciseType = "paragraph_writing";
+    ex6.title = "Write an Opinion Essay";
+    ex6.description = "Express your opinion on a topic";
+    ex6.instructions = "Write 200-250 words expressing your opinion on the given topic. Support your views with reasons and examples.";
+    ex6.level = "intermediate";
+    ex6.topic = "writing";
+    ex6.topicDescription = "Topic: Should students have homework every day?\n\nWrite your opinion with clear reasons and examples.";
+    ex6.requirements = {
+        "Clear thesis statement",
+        "At least 2 supporting arguments",
+        "Examples or evidence for each argument",
+        "A conclusion summarizing your view"
+    };
+    ex6.minWordCount = 200;
+    ex6.maxWordCount = 250;
+    ex6.duration = 30;
+    exercises[ex6.exerciseId] = ex6;
+
+    // Exercise 7: Advanced Writing - Formal Email
+    Exercise ex7;
+    ex7.exerciseId = "ex_007";
+    ex7.exerciseType = "paragraph_writing";
+    ex7.title = "Write a Formal Business Email";
+    ex7.description = "Practice professional email writing";
+    ex7.instructions = "Write a formal email to your manager requesting time off for a family event.";
+    ex7.level = "advanced";
+    ex7.topic = "writing";
+    ex7.topicDescription = "You need to request 3 days off next month for a family wedding. Write a professional email including:\n- Proper greeting\n- Clear request with dates\n- Reason for the request\n- Proposed solution for your work\n- Professional closing";
+    ex7.requirements = {
+        "Formal greeting and closing",
+        "Clear subject line",
+        "Specific dates mentioned",
+        "Professional tone throughout",
+        "Solution-oriented approach"
+    };
+    ex7.minWordCount = 150;
+    ex7.maxWordCount = 200;
+    ex7.duration = 25;
+    exercises[ex7.exerciseId] = ex7;
+
+    // Exercise 8: Beginner Sentence Rewrite
+    Exercise ex8;
+    ex8.exerciseId = "ex_008";
+    ex8.exerciseType = "sentence_rewrite";
+    ex8.title = "Make Negative Sentences";
+    ex8.description = "Practice converting positive sentences to negative";
+    ex8.instructions = "Rewrite these positive sentences as negative sentences using 'not' or contractions.";
+    ex8.level = "beginner";
+    ex8.topic = "grammar";
+    ex8.prompts = {
+        "I like coffee.",
+        "She is a student.",
+        "They have a car.",
+        "He can swim.",
+        "We are going to the park."
+    };
+    ex8.duration = 15;
+    exercises[ex8.exerciseId] = ex8;
 
     // ========== TẠO TRÒ CHƠI ==========
 
@@ -3001,6 +3077,304 @@ std::string handleGetPendingReviews(const std::string& json) {
            R"(,"payload":{"status":"success","submissions":)" + submissionsJson + R"(}})";
 }
 
+// Xử lý GET_EXERCISE_LIST_REQUEST (List all exercises with filtering)
+std::string handleGetExerciseList(const std::string& json) {
+    std::string payload = getJsonObject(json, "payload");
+    std::string messageId = getJsonValue(json, "messageId");
+    std::string sessionToken = getJsonValue(json, "sessionToken");
+    std::string level = getJsonValue(payload, "level");
+    std::string exerciseType = getJsonValue(payload, "exerciseType");
+
+    std::string userId = validateSession(sessionToken);
+    if (userId.empty()) {
+        return R"({"messageType":"GET_EXERCISE_LIST_RESPONSE","messageId":")" + messageId +
+               R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+               R"(,"payload":{"status":"error","message":"Invalid or expired session"}})";
+    }
+
+    std::stringstream exerciseList;
+    exerciseList << "[";
+    bool first = true;
+    int count = 0;
+
+    for (const auto& pair : exercises) {
+        const Exercise& ex = pair.second;
+
+        // Apply filters
+        bool levelMatch = level.empty() || ex.level == level;
+        bool typeMatch = exerciseType.empty() || ex.exerciseType == exerciseType;
+
+        if (levelMatch && typeMatch) {
+            if (!first) exerciseList << ",";
+            first = false;
+
+            exerciseList << R"({"exerciseId":")" << ex.exerciseId
+                         << R"(","exerciseType":")" << ex.exerciseType
+                         << R"(","title":")" << escapeJson(ex.title)
+                         << R"(","description":")" << escapeJson(ex.description)
+                         << R"(","level":")" << ex.level
+                         << R"(","topic":")" << ex.topic
+                         << R"(","duration":)" << ex.duration << "}";
+            count++;
+        }
+    }
+    exerciseList << "]";
+
+    return R"({"messageType":"GET_EXERCISE_LIST_RESPONSE","messageId":")" + messageId +
+           R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+           R"(,"payload":{"status":"success","data":{"exercises":)" + exerciseList.str() +
+           R"(,"total":)" + std::to_string(count) +
+           R"(,"filterLevel":")" + level +
+           R"(","filterType":")" + exerciseType + R"("}}})";
+}
+
+// Xử lý SAVE_DRAFT_REQUEST (Save draft submission)
+std::string handleSaveDraft(const std::string& json) {
+    std::string payload = getJsonObject(json, "payload");
+    std::string messageId = getJsonValue(json, "messageId");
+    std::string sessionToken = getJsonValue(json, "sessionToken");
+    std::string exerciseId = getJsonValue(payload, "exerciseId");
+    std::string content = getJsonValue(payload, "content");
+    std::string audioUrl = getJsonValue(payload, "audioUrl");
+
+    std::string userId = validateSession(sessionToken);
+    if (userId.empty()) {
+        return R"({"messageType":"SAVE_DRAFT_RESPONSE","messageId":")" + messageId +
+               R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+               R"(,"payload":{"status":"error","message":"Invalid or expired session"}})";
+    }
+
+    auto it = exercises.find(exerciseId);
+    if (it == exercises.end()) {
+        return R"({"messageType":"SAVE_DRAFT_RESPONSE","messageId":")" + messageId +
+               R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+               R"(,"payload":{"status":"error","message":"Exercise not found"}})";
+    }
+
+    std::string submissionId;
+    bool isNewDraft = true;
+
+    {
+        std::lock_guard<std::mutex> lock(exercisesMutex);
+
+        // Check if user already has a draft for this exercise
+        for (auto& submission : exerciseSubmissions) {
+            if (submission.userId == userId &&
+                submission.exerciseId == exerciseId &&
+                submission.status == "draft") {
+                // Update existing draft
+                submission.content = content;
+                submission.audioUrl = audioUrl;
+                submissionId = submission.submissionId;
+                isNewDraft = false;
+                break;
+            }
+        }
+
+        if (isNewDraft) {
+            ExerciseSubmission draft;
+            draft.submissionId = generateId("draft");
+            draft.exerciseId = exerciseId;
+            draft.userId = userId;
+            draft.exerciseType = it->second.exerciseType;
+            draft.content = content;
+            draft.audioUrl = audioUrl;
+            draft.status = "draft";
+            draft.createdAt = getCurrentTimestamp();
+            draft.submittedAt = 0;
+            draft.teacherScore = 0;
+            draft.reviewedAt = 0;
+
+            exerciseSubmissions.push_back(draft);
+            submissionId = draft.submissionId;
+        }
+    }
+
+    return R"({"messageType":"SAVE_DRAFT_RESPONSE","messageId":")" + messageId +
+           R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+           R"(,"payload":{"status":"success","message":"Draft saved successfully","data":{"submissionId":")" +
+           submissionId + R"(","isNew":)" + (isNewDraft ? "true" : "false") + R"(}}})";
+}
+
+// Xử lý GET_MY_DRAFTS_REQUEST (Get student's drafts)
+std::string handleGetMyDrafts(const std::string& json) {
+    std::string messageId = getJsonValue(json, "messageId");
+    std::string sessionToken = getJsonValue(json, "sessionToken");
+
+    std::string userId = validateSession(sessionToken);
+    if (userId.empty()) {
+        return R"({"messageType":"GET_MY_DRAFTS_RESPONSE","messageId":")" + messageId +
+               R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+               R"(,"payload":{"status":"error","message":"Invalid or expired session"}})";
+    }
+
+    std::string draftsJson = "[";
+    bool first = true;
+
+    {
+        std::lock_guard<std::mutex> lock(exercisesMutex);
+        for (const auto& submission : exerciseSubmissions) {
+            if (submission.userId == userId && submission.status == "draft") {
+                if (!first) draftsJson += ",";
+                first = false;
+
+                std::string exerciseTitle = "Unknown Exercise";
+                auto exIt = exercises.find(submission.exerciseId);
+                if (exIt != exercises.end()) {
+                    exerciseTitle = exIt->second.title;
+                }
+
+                draftsJson += R"({"submissionId":")" + submission.submissionId +
+                              R"(","exerciseId":")" + submission.exerciseId +
+                              R"(","exerciseTitle":")" + escapeJson(exerciseTitle) +
+                              R"(","exerciseType":")" + submission.exerciseType +
+                              R"(","content":")" + escapeJson(submission.content) +
+                              R"(","createdAt":)" + std::to_string(submission.createdAt) + "}";
+            }
+        }
+    }
+    draftsJson += "]";
+
+    return R"({"messageType":"GET_MY_DRAFTS_RESPONSE","messageId":")" + messageId +
+           R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+           R"(,"payload":{"status":"success","drafts":)" + draftsJson + R"(}})";
+}
+
+// Xử lý GET_SUBMISSION_DETAIL_REQUEST (Teacher gets full submission detail)
+std::string handleGetSubmissionDetail(const std::string& json) {
+    std::string payload = getJsonObject(json, "payload");
+    std::string messageId = getJsonValue(json, "messageId");
+    std::string sessionToken = getJsonValue(json, "sessionToken");
+    std::string submissionId = getJsonValue(payload, "submissionId");
+
+    std::string userId = validateSession(sessionToken);
+    if (userId.empty() || !isTeacher(userId)) {
+        return R"({"messageType":"GET_SUBMISSION_DETAIL_RESPONSE","messageId":")" + messageId +
+               R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+               R"(,"payload":{"status":"error","message":"Unauthorized: Teacher access required"}})";
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(exercisesMutex);
+        for (const auto& submission : exerciseSubmissions) {
+            if (submission.submissionId == submissionId) {
+                // Get exercise details
+                std::string exerciseTitle = "Unknown Exercise";
+                std::string exerciseInstructions = "";
+                std::string exerciseType = submission.exerciseType;
+                int duration = 0;
+
+                auto exIt = exercises.find(submission.exerciseId);
+                if (exIt != exercises.end()) {
+                    exerciseTitle = exIt->second.title;
+                    exerciseInstructions = exIt->second.instructions;
+                    duration = exIt->second.duration;
+                }
+
+                // Get student details
+                std::string studentName = "Unknown";
+                std::string studentEmail = "";
+                {
+                    std::lock_guard<std::mutex> userLock(usersMutex);
+                    auto userIt = userById.find(submission.userId);
+                    if (userIt != userById.end()) {
+                        studentName = userIt->second->fullname;
+                        studentEmail = userIt->second->email;
+                    }
+                }
+
+                std::stringstream response;
+                response << R"({"messageType":"GET_SUBMISSION_DETAIL_RESPONSE","messageId":")" << messageId
+                         << R"(","timestamp":)" << getCurrentTimestamp()
+                         << R"(,"payload":{"status":"success","data":{"submission":{)"
+                         << R"("submissionId":")" << submission.submissionId
+                         << R"(","exerciseId":")" << submission.exerciseId
+                         << R"(","exerciseType":")" << submission.exerciseType
+                         << R"(","content":")" << escapeJson(submission.content)
+                         << R"(","audioUrl":")" << escapeJson(submission.audioUrl)
+                         << R"(","status":")" << submission.status
+                         << R"(","submittedAt":)" << submission.submittedAt
+                         << R"(},"exercise":{"title":")" << escapeJson(exerciseTitle)
+                         << R"(","instructions":")" << escapeJson(exerciseInstructions)
+                         << R"(","duration":)" << duration
+                         << R"(},"student":{"studentId":")" << submission.userId
+                         << R"(","studentName":")" << escapeJson(studentName)
+                         << R"(","studentEmail":")" << escapeJson(studentEmail)
+                         << R"("}}}})";
+
+                return response.str();
+            }
+        }
+    }
+
+    return R"({"messageType":"GET_SUBMISSION_DETAIL_RESPONSE","messageId":")" + messageId +
+           R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+           R"(,"payload":{"status":"error","message":"Submission not found"}})";
+}
+
+// Handle GET_REVIEW_STATISTICS_REQUEST - Get teacher review statistics
+std::string handleGetReviewStatistics(const std::string& json) {
+    std::string messageId = getJsonValue(json, "messageId");
+    std::string sessionToken = getJsonValue(json, "sessionToken");
+
+    std::string userId = validateSession(sessionToken);
+    if (userId.empty() || !isTeacher(userId)) {
+        return R"({"messageType":"GET_REVIEW_STATISTICS_RESPONSE","messageId":")" + messageId +
+               R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+               R"(,"payload":{"status":"error","message":"Unauthorized: Teacher access required"}})";
+    }
+
+    size_t totalPending = 0;
+    size_t totalReviewed = 0;
+    size_t reviewedToday = 0;
+    size_t reviewedThisWeek = 0;
+    int totalScore = 0;
+    int reviewedCount = 0;
+
+    int64_t now = getCurrentTimestamp();
+    int64_t dayStart = now - (now % 86400000);  // Start of today (ms)
+    int64_t weekStart = now - (7 * 86400000);   // 7 days ago
+
+    {
+        std::lock_guard<std::mutex> lock(exercisesMutex);
+        for (const auto& submission : exerciseSubmissions) {
+            if (submission.status == english_learning::core::SubmissionStatusStr::PENDING_REVIEW ||
+                submission.status == "pending") {
+                totalPending++;
+            }
+            else if (submission.status == english_learning::core::SubmissionStatusStr::REVIEWED ||
+                     submission.status == "reviewed") {
+                totalReviewed++;
+                if (submission.teacherId == userId) {
+                    if (submission.reviewedAt >= dayStart) {
+                        reviewedToday++;
+                    }
+                    if (submission.reviewedAt >= weekStart) {
+                        reviewedThisWeek++;
+                    }
+                    totalScore += submission.teacherScore;
+                    reviewedCount++;
+                }
+            }
+        }
+    }
+
+    double averageScore = (reviewedCount > 0) ? (double)totalScore / reviewedCount : 0.0;
+
+    std::stringstream response;
+    response << R"({"messageType":"GET_REVIEW_STATISTICS_RESPONSE","messageId":")" << messageId
+             << R"(","timestamp":)" << getCurrentTimestamp()
+             << R"(,"payload":{"status":"success","data":{"statistics":{)"
+             << R"("totalPending":)" << totalPending
+             << R"(,"totalReviewed":)" << totalReviewed
+             << R"(,"reviewedToday":)" << reviewedToday
+             << R"(,"reviewedThisWeek":)" << reviewedThisWeek
+             << R"(,"averageScore":)" << std::fixed << std::setprecision(1) << averageScore
+             << R"(}}}})";
+
+    return response.str();
+}
+
 // Xử lý SET_LEVEL_REQUEST
 std::string handleSetLevel(const std::string& json) {
     std::string payload = getJsonObject(json, "payload");
@@ -3484,6 +3858,22 @@ void handleClient(int clientSocket, struct sockaddr_in clientAddr) {
         }
         else if (messageType == "REVIEW_EXERCISE_REQUEST") {
             response = handleReviewExercise(message);
+        }
+        // New homework/practice handlers
+        else if (messageType == "GET_EXERCISE_LIST_REQUEST") {
+            response = handleGetExerciseList(message);
+        }
+        else if (messageType == "SAVE_DRAFT_REQUEST") {
+            response = handleSaveDraft(message);
+        }
+        else if (messageType == "GET_MY_DRAFTS_REQUEST") {
+            response = handleGetMyDrafts(message);
+        }
+        else if (messageType == "GET_SUBMISSION_DETAIL_REQUEST") {
+            response = handleGetSubmissionDetail(message);
+        }
+        else if (messageType == "GET_REVIEW_STATISTICS_REQUEST") {
+            response = handleGetReviewStatistics(message);
         }
         else if (messageType == "GET_GAME_LIST_REQUEST") {
             response = handleGetGameList(message);

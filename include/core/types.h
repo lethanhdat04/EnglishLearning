@@ -47,9 +47,17 @@ enum class ExerciseType {
 
 // Submission status
 enum class SubmissionStatus {
+    Draft,
     Pending,
     Reviewed
 };
+
+// Submission status string constants (for string-based comparisons)
+namespace SubmissionStatusStr {
+    constexpr const char* DRAFT = "draft";
+    constexpr const char* PENDING_REVIEW = "pending_review";
+    constexpr const char* REVIEWED = "reviewed";
+}
 
 // Game types
 enum class GameType {
@@ -167,14 +175,18 @@ inline GameType stringToGameType(const std::string& str) {
 
 inline std::string submissionStatusToString(SubmissionStatus status) {
     switch (status) {
-        case SubmissionStatus::Pending: return "pending";
+        case SubmissionStatus::Draft: return "draft";
+        case SubmissionStatus::Pending: return "pending_review";
         case SubmissionStatus::Reviewed: return "reviewed";
     }
-    return "pending";
+    return "pending_review";
 }
 
 inline SubmissionStatus stringToSubmissionStatus(const std::string& str) {
+    if (str == "draft") return SubmissionStatus::Draft;
     if (str == "reviewed") return SubmissionStatus::Reviewed;
+    // Handle legacy "pending" value
+    if (str == "pending" || str == "pending_review") return SubmissionStatus::Pending;
     return SubmissionStatus::Pending;
 }
 

@@ -993,23 +993,355 @@ void takeTest() {
 }
 
 // ============================================================================
+// BROWSE EXERCISE LIST
+// ============================================================================
+
+void browseExerciseList() {
+    clearScreen();
+    printColored("╔══════════════════════════════════════════╗\n", "cyan");
+    printColored("║          BROWSE EXERCISES                ║\n", "cyan");
+    printColored("╚══════════════════════════════════════════╝\n", "cyan");
+
+    printColored("Filter by level (or press Enter for all): ", "yellow");
+    std::string levelFilter;
+    std::getline(std::cin, levelFilter);
+    if (levelFilter.empty()) levelFilter = "";
+
+    printColored("Filter by type:\n", "yellow");
+    printColored("  1. Sentence Rewrite\n", "");
+    printColored("  2. Paragraph Writing\n", "");
+    printColored("  3. Topic Speaking\n", "");
+    printColored("  0. All types\n", "");
+    printColored("Your choice: ", "green");
+
+    std::string typeChoice;
+    std::getline(std::cin, typeChoice);
+    std::string typeFilter = "";
+    if (typeChoice == "1") typeFilter = "sentence_rewrite";
+    else if (typeChoice == "2") typeFilter = "paragraph_writing";
+    else if (typeChoice == "3") typeFilter = "topic_speaking";
+
+    // Get exercise list
+    std::string request = R"({"messageType":"GET_EXERCISE_LIST_REQUEST","messageId":")" + generateMessageId() +
+                          R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                          R"(,"sessionToken":")" + sessionToken +
+                          R"(","payload":{"level":")" + levelFilter +
+                          R"(","type":")" + typeFilter + R"("}})";
+
+    std::string response = sendAndReceive(request);
+    std::string status = getJsonValue(response, "status");
+
+    if (status != "success") {
+        std::string message = getJsonValue(response, "message");
+        printColored("\n[ERROR] " + message + "\n", "red");
+        waitEnter();
+        return;
+    }
+
+    std::string data = getJsonObject(response, "data");
+    std::string exercisesArray = getJsonArray(data, "exercises");
+    std::string total = getJsonValue(data, "total");
+
+    printColored("\n═══════════════════════════════════════════\n", "cyan");
+    printColored("Found " + total + " exercise(s)\n\n", "green");
+
+    if (exercisesArray.empty() || exercisesArray == "[]") {
+        printColored("No exercises found with your filters.\n", "yellow");
+        waitEnter();
+        return;
+    }
+
+    std::vector<std::string> exercises = parseJsonArray(exercisesArray);
+    for (size_t i = 0; i < exercises.size(); i++) {
+        std::string ex = exercises[i];
+        std::string exId = getJsonValue(ex, "exerciseId");
+        std::string exTitle = getJsonValue(ex, "title");
+        std::string exType = getJsonValue(ex, "exerciseType");
+        std::string exLevel = getJsonValue(ex, "level");
+        std::string exDuration = getJsonValue(ex, "duration");
+
+        printColored("[" + std::to_string(i + 1) + "] ", "yellow");
+        printColored(exTitle + "\n", "white");
+        printColored("    Type: " + exType + " | Level: " + exLevel + " | Duration: " + exDuration + " min\n", "");
+    }
+
+    printColored("\n═══════════════════════════════════════════\n", "cyan");
+    printColored("Enter number to start exercise (0 to go back): ", "green");
+
+    std::string choice;
+    std::getline(std::cin, choice);
+    if (choice == "0" || choice.empty()) return;
+
+    int idx = std::stoi(choice) - 1;
+    if (idx < 0 || idx >= (int)exercises.size()) {
+        printColored("Invalid selection.\n", "red");
+        waitEnter();
+        return;
+    }
+
+    std::string selectedExercise = exercises[idx];
+    std::string exerciseId = getJsonValue(selectedExercise, "exerciseId");
+    std::string exerciseType = getJsonValue(selectedExercise, "exerciseType");
+
+    // Now get the full exercise details and do it
+    std::string getRequest = R"({"messageType":"GET_EXERCISE_REQUEST","messageId":")" + generateMessageId() +
+                             R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                             R"(,"sessionToken":")" + sessionToken +
+                             R"(","payload":{"exerciseId":")" + exerciseId + R"("}})";
+
+    response = sendAndReceive(getRequest);
+    status = getJsonValue(response, "status");
+
+    if (status != "success") {
+        std::string message = getJsonValue(response, "message");
+        printColored("\n[ERROR] " + message + "\n", "red");
+        waitEnter();
+        return;
+    }
+
+    data = getJsonObject(response, "data");
+    std::string title = getJsonValue(data, "title");
+    std::string instructions = getJsonValue(data, "instructions");
+    std::string duration = getJsonValue(data, "duration");
+
+    clearScreen();
+    printColored("╔══════════════════════════════════════════╗\n", "cyan");
+    printColored("║  ", "cyan");
+    printColored(title, "yellow");
+    printColored("\n", "");
+    printColored("╠══════════════════════════════════════════╣\n", "cyan");
+    printColored("║  Duration: ", "cyan");
+    printColored(duration + " minutes", "green");
+    printColored("\n", "");
+    printColored("╚══════════════════════════════════════════╝\n\n", "cyan");
+
+    printColored("Instructions:\n", "yellow");
+    std::string inst = unescapeJson(instructions);
+    std::cout << inst << "\n\n";
+
+    std::string content = "";
+
+    if (exerciseType == "sentence_rewrite") {
+        std::string promptsArray = getJsonArray(data, "prompts");
+        std::vector<std::string> prompts = parseJsonArray(promptsArray);
+
+        printColored("────────────────────────────────────────────\n", "cyan");
+        printColored("Sentences to rewrite:\n\n", "magenta");
+
+        for (size_t i = 0; i < prompts.size(); i++) {
+            printColored(std::to_string(i + 1) + ". " + prompts[i] + "\n", "");
+        }
+
+        printColored("\n────────────────────────────────────────────\n", "cyan");
+        printColored("Type your rewritten sentences (press Enter twice when done):\n", "yellow");
+
+        std::string line;
+        std::vector<std::string> rewrittenSentences;
+        while (std::getline(std::cin, line)) {
+            if (line.empty() && !rewrittenSentences.empty()) break;
+            if (!line.empty()) rewrittenSentences.push_back(line);
+        }
+
+        for (size_t i = 0; i < rewrittenSentences.size(); i++) {
+            if (i > 0) content += "\n";
+            content += rewrittenSentences[i];
+        }
+    } else if (exerciseType == "paragraph_writing") {
+        std::string topicDesc = getJsonValue(data, "topicDescription");
+        printColored("Topic:\n", "magenta");
+        printColored(unescapeJson(topicDesc) + "\n\n", "");
+
+        printColored("Write your paragraph (press Enter twice when done):\n", "yellow");
+
+        std::string line;
+        std::vector<std::string> lines;
+        while (std::getline(std::cin, line)) {
+            if (line.empty() && !lines.empty()) break;
+            if (!line.empty()) lines.push_back(line);
+        }
+
+        for (size_t i = 0; i < lines.size(); i++) {
+            if (i > 0) content += "\n";
+            content += lines[i];
+        }
+    } else if (exerciseType == "topic_speaking") {
+        std::string topicDesc = getJsonValue(data, "topicDescription");
+        printColored("Topic:\n", "magenta");
+        printColored(unescapeJson(topicDesc) + "\n\n", "");
+        printColored("Type your speaking points:\n", "yellow");
+
+        std::string line;
+        std::vector<std::string> lines;
+        while (std::getline(std::cin, line)) {
+            if (line.empty() && !lines.empty()) break;
+            if (!line.empty()) lines.push_back(line);
+        }
+
+        for (size_t i = 0; i < lines.size(); i++) {
+            if (i > 0) content += "\n";
+            content += lines[i];
+        }
+    }
+
+    if (content.empty()) {
+        printColored("\n[ERROR] No content entered.\n", "red");
+        waitEnter();
+        return;
+    }
+
+    // Ask: Save as draft or Submit?
+    printColored("\n────────────────────────────────────────────\n", "cyan");
+    printColored("What would you like to do?\n", "yellow");
+    printColored("  1. Save as Draft (continue later)\n", "");
+    printColored("  2. Submit for Review\n", "");
+    printColored("  0. Cancel\n", "");
+    printColored("Your choice: ", "green");
+
+    std::string actionChoice;
+    std::getline(std::cin, actionChoice);
+
+    if (actionChoice == "1") {
+        // Save draft
+        std::string draftRequest = R"({"messageType":"SAVE_DRAFT_REQUEST","messageId":")" + generateMessageId() +
+                                   R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                                   R"(,"sessionToken":")" + sessionToken +
+                                   R"(","payload":{"exerciseId":")" + exerciseId +
+                                   R"(","content":")" + escapeJson(content) + R"(","audioUrl":""}})";
+
+        std::string draftResponse = sendAndReceive(draftRequest);
+        std::string draftStatus = getJsonValue(draftResponse, "status");
+
+        if (draftStatus == "success") {
+            printColored("\n[SUCCESS] Draft saved! You can continue later.\n", "green");
+        } else {
+            std::string message = getJsonValue(draftResponse, "message");
+            printColored("\n[ERROR] " + message + "\n", "red");
+        }
+    } else if (actionChoice == "2") {
+        // Submit exercise
+        std::string submitRequest = R"({"messageType":"SUBMIT_EXERCISE_REQUEST","messageId":")" + generateMessageId() +
+                                    R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                                    R"(,"sessionToken":")" + sessionToken +
+                                    R"(","payload":{"exerciseId":")" + exerciseId +
+                                    R"(","exerciseType":")" + exerciseType +
+                                    R"(","content":")" + escapeJson(content) + R"(","audioUrl":""}})";
+
+        std::string submitResponse = sendAndReceive(submitRequest);
+        std::string submitStatus = getJsonValue(submitResponse, "status");
+
+        if (submitStatus == "success") {
+            printColored("\n[SUCCESS] Exercise submitted for review!\n", "green");
+            printColored("A teacher will review and provide feedback.\n", "");
+        } else {
+            std::string message = getJsonValue(submitResponse, "message");
+            printColored("\n[ERROR] " + message + "\n", "red");
+        }
+    }
+
+    waitEnter();
+}
+
+// ============================================================================
+// VIEW MY DRAFTS
+// ============================================================================
+
+void viewMyDrafts() {
+    clearScreen();
+    printColored("╔══════════════════════════════════════════╗\n", "cyan");
+    printColored("║             MY DRAFTS                    ║\n", "cyan");
+    printColored("╚══════════════════════════════════════════╝\n", "cyan");
+
+    std::string request = R"({"messageType":"GET_MY_DRAFTS_REQUEST","messageId":")" + generateMessageId() +
+                          R"(","timestamp":)" + std::to_string(getCurrentTimestamp()) +
+                          R"(,"sessionToken":")" + sessionToken + R"(","payload":{}})";
+
+    std::string response = sendAndReceive(request);
+    std::string status = getJsonValue(response, "status");
+
+    if (status != "success") {
+        std::string message = getJsonValue(response, "message");
+        printColored("\n[ERROR] " + message + "\n", "red");
+        waitEnter();
+        return;
+    }
+
+    std::string data = getJsonObject(response, "data");
+    std::string draftsArray = getJsonArray(data, "drafts");
+    std::string total = getJsonValue(data, "total");
+
+    if (draftsArray.empty() || draftsArray == "[]" || total == "0") {
+        printColored("\nYou have no saved drafts.\n", "yellow");
+        waitEnter();
+        return;
+    }
+
+    printColored("\nYou have " + total + " draft(s):\n\n", "green");
+
+    std::vector<std::string> drafts = parseJsonArray(draftsArray);
+    for (size_t i = 0; i < drafts.size(); i++) {
+        std::string draft = drafts[i];
+        std::string exTitle = getJsonValue(draft, "exerciseTitle");
+        std::string exType = getJsonValue(draft, "exerciseType");
+        std::string createdAt = getJsonValue(draft, "createdAt");
+
+        printColored("[" + std::to_string(i + 1) + "] ", "yellow");
+        printColored(exTitle + " (" + exType + ")\n", "white");
+    }
+
+    printColored("\nSelect a draft to continue (0 to go back): ", "green");
+    std::string choice;
+    std::getline(std::cin, choice);
+
+    if (choice == "0" || choice.empty()) return;
+
+    printColored("\nNote: Full draft editing will be available in the GUI version.\n", "yellow");
+    waitEnter();
+}
+
+// ============================================================================
 // DO EXERCISES
 // ============================================================================
 
 void doExercises() {
     clearScreen();
     printColored("╔══════════════════════════════════════════╗\n", "cyan");
-    printColored("║              DO EXERCISES                ║\n", "cyan");
+    printColored("║              EXERCISES                   ║\n", "cyan");
+    printColored("╚══════════════════════════════════════════╝\n", "cyan");
+
+    printColored("What would you like to do?\n\n", "yellow");
+    printColored("  1. Browse All Exercises\n", "green");
+    printColored("  2. Quick Exercise (by type)\n", "green");
+    printColored("  3. View My Drafts\n", "green");
+    printColored("  0. Back to main menu\n\n", "");
+    printColored("Your current level: ", "");
+    printColored(currentLevel + "\n\n", "yellow");
+    printColored("Select option: ", "green");
+
+    std::string menuChoice;
+    std::getline(std::cin, menuChoice);
+
+    if (menuChoice == "1") {
+        browseExerciseList();
+        return;
+    } else if (menuChoice == "3") {
+        viewMyDrafts();
+        return;
+    } else if (menuChoice != "2") {
+        return;
+    }
+
+    // Quick exercise by type (original flow)
+    clearScreen();
+    printColored("╔══════════════════════════════════════════╗\n", "cyan");
+    printColored("║          QUICK EXERCISE                  ║\n", "cyan");
     printColored("╚══════════════════════════════════════════╝\n", "cyan");
 
     printColored("Exercise Types:\n", "yellow");
     printColored("  1. Sentence Rewrite (grammar practice)\n", "green");
     printColored("  2. Paragraph Writing (writing practice)\n", "green");
     printColored("  3. Topic Speaking (speaking practice)\n", "green");
-    printColored("  0. Back to main menu\n\n", "");
-    printColored("Your current level: ", "");
-    printColored(currentLevel + "\n\n", "yellow");
-    printColored("Select exercise type (1/2/3/0): ", "green");
+    printColored("  0. Back\n\n", "");
+    printColored("Select exercise type: ", "green");
 
     std::string typeChoice;
     std::getline(std::cin, typeChoice);

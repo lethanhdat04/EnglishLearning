@@ -2162,6 +2162,159 @@ static void on_voice_call_button_clicked(GtkWidget *widget, gpointer data) {
 }
 
 // ============================================================================
+// EXERCISES DIALOG - Browse and do exercises
+// ============================================================================
+
+void show_exercises_dialog() {
+  // Send request to get exercise list
+  std::string jsonRequest =
+      "{\"messageType\":\"GET_EXERCISE_LIST_REQUEST\", \"sessionToken\":\"" +
+      sessionToken + "\", \"payload\":{\"level\":\"" + currentLevel + "\", \"type\":\"\"}}";
+
+  GtkWidget *loading =
+      gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO,
+                             GTK_BUTTONS_NONE, "Đang tải danh sách bài tập...");
+  gtk_widget_show_now(loading);
+  while (gtk_events_pending())
+    gtk_main_iteration();
+
+  if (!sendMessage(jsonRequest)) {
+    gtk_widget_destroy(loading);
+    GtkWidget *error =
+        gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR,
+                               GTK_BUTTONS_OK, "Không thể kết nối đến server");
+    gtk_dialog_run(GTK_DIALOG(error));
+    gtk_widget_destroy(error);
+    return;
+  }
+
+  std::string response = waitForResponse(5000);
+  gtk_widget_destroy(loading);
+
+  if (response.empty() || response.find("\"status\":\"success\"") == std::string::npos) {
+    GtkWidget *error =
+        gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR,
+                               GTK_BUTTONS_OK, "Không thể tải danh sách bài tập");
+    gtk_dialog_run(GTK_DIALOG(error));
+    gtk_widget_destroy(error);
+    return;
+  }
+
+  // Create exercises dialog
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(
+      "Làm bài tập", GTK_WINDOW(window), GTK_DIALOG_MODAL,
+      "Đóng", GTK_RESPONSE_CLOSE, NULL);
+  gtk_window_set_default_size(GTK_WINDOW(dialog), 600, 500);
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
+                                 GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_box_pack_start(GTK_BOX(content), scrolled, TRUE, TRUE, 5);
+
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+  gtk_container_set_border_width(GTK_CONTAINER(vbox), 10);
+  gtk_container_add(GTK_CONTAINER(scrolled), vbox);
+
+  GtkWidget *title = gtk_label_new(NULL);
+  std::string titleMarkup = "<b><big>Bài tập (" + currentLevel + ")</big></b>";
+  gtk_label_set_markup(GTK_LABEL(title), titleMarkup.c_str());
+  gtk_box_pack_start(GTK_BOX(vbox), title, FALSE, FALSE, 10);
+
+  // Parse exercises from response
+  int exerciseCount = 0;
+  size_t arrStart = response.find("\"exercises\":[");
+  if (arrStart == std::string::npos) {
+    GtkWidget *noData = gtk_label_new("Không có bài tập nào.");
+    gtk_box_pack_start(GTK_BOX(vbox), noData, FALSE, FALSE, 20);
+  } else {
+    arrStart += 13;
+    size_t arrEnd = response.find("]", arrStart);
+    std::string exercisesStr = response.substr(arrStart, arrEnd - arrStart);
+
+    // Parse each exercise object
+    int braceCount = 0;
+    size_t objStart = std::string::npos;
+
+    for (size_t i = 0; i < exercisesStr.length(); i++) {
+      if (exercisesStr[i] == '{') {
+        if (braceCount == 0) objStart = i;
+        braceCount++;
+      } else if (exercisesStr[i] == '}') {
+        braceCount--;
+        if (braceCount == 0 && objStart != std::string::npos) {
+          std::string obj = exercisesStr.substr(objStart, i - objStart + 1);
+          exerciseCount++;
+
+          // Extract fields using regex
+          std::string exerciseTitle = "";
+          std::string exerciseType = "";
+          std::string duration = "";
+
+          std::regex re_title("\"title\"\\s*:\\s*\"([^\"]+)\"");
+          std::regex re_type("\"exerciseType\"\\s*:\\s*\"([^\"]+)\"");
+          std::regex re_duration("\"duration\"\\s*:\\s*(\\d+)");
+          std::smatch match;
+
+          if (std::regex_search(obj, match, re_title) && match.size() > 1) {
+            exerciseTitle = match.str(1);
+          }
+          if (std::regex_search(obj, match, re_type) && match.size() > 1) {
+            exerciseType = match.str(1);
+          }
+          if (std::regex_search(obj, match, re_duration) && match.size() > 1) {
+            duration = match.str(1);
+          }
+
+          // Create exercise card
+          GtkWidget *frame = gtk_frame_new(NULL);
+          gtk_box_pack_start(GTK_BOX(vbox), frame, FALSE, FALSE, 5);
+
+          GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+          gtk_container_set_border_width(GTK_CONTAINER(hbox), 10);
+          gtk_container_add(GTK_CONTAINER(frame), hbox);
+
+          GtkWidget *infoBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+          gtk_box_pack_start(GTK_BOX(hbox), infoBox, TRUE, TRUE, 0);
+
+          // Title and type
+          GtkWidget *lblTitle = gtk_label_new(NULL);
+          std::string markup = "<b>" + exerciseTitle + "</b> (" + exerciseType + ")";
+          gtk_label_set_markup(GTK_LABEL(lblTitle), markup.c_str());
+          gtk_widget_set_halign(lblTitle, GTK_ALIGN_START);
+          gtk_box_pack_start(GTK_BOX(infoBox), lblTitle, FALSE, FALSE, 0);
+
+          // Duration
+          GtkWidget *lblDuration = gtk_label_new(NULL);
+          std::string durationText = "Thời gian: " + duration + " phút";
+          gtk_label_set_text(GTK_LABEL(lblDuration), durationText.c_str());
+          gtk_widget_set_halign(lblDuration, GTK_ALIGN_START);
+          gtk_box_pack_start(GTK_BOX(infoBox), lblDuration, FALSE, FALSE, 0);
+
+          objStart = std::string::npos;
+        }
+      }
+    }
+  }
+
+  // Show count
+  GtkWidget *countLabel = gtk_label_new(NULL);
+  std::string countText = "Tổng số: " + std::to_string(exerciseCount) + " bài tập";
+  gtk_label_set_text(GTK_LABEL(countLabel), countText.c_str());
+  gtk_box_pack_start(GTK_BOX(vbox), countLabel, FALSE, FALSE, 10);
+
+  // Note about full functionality
+  GtkWidget *note = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(note),
+      "<i>Lưu ý: Nhấp vào bài tập để bắt đầu làm.\nChức năng này đang được phát triển.</i>");
+  gtk_box_pack_start(GTK_BOX(vbox), note, FALSE, FALSE, 10);
+
+  gtk_widget_show_all(dialog);
+  gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+}
+
+// ============================================================================
 // VIEW TEACHER FEEDBACK DIALOG
 // ============================================================================
 
@@ -2490,18 +2643,21 @@ void on_menu_btn_clicked(GtkWidget *widget, gpointer data) {
     show_test_dialog();
     break;
   case 3:
-    show_chat_dialog();
+    show_exercises_dialog();
     break;
   case 4:
-    show_game_dialog();
+    show_chat_dialog();
     break;
   case 5:
-    show_voice_call_dialog();
+    show_game_dialog();
     break;
   case 6:
-    show_feedback_dialog();
+    show_voice_call_dialog();
     break;
   case 7:
+    show_feedback_dialog();
+    break;
+  case 8:
     gtk_main_quit();
     break;
   }
@@ -2523,9 +2679,9 @@ void show_main_menu() {
   gtk_box_pack_start(GTK_BOX(vbox_menu), lbl, FALSE, FALSE, 10);
 
   const char *buttons[] = {"1. Chọn cấp độ", "2. Học bài", "3. Làm bài thi",
-                           "4. Chat",        "5. Game",    "6. Voice Call",
-                           "7. Xem phản hồi", "Thoát"};
-  for (int i = 0; i < 8; i++) {
+                           "4. Làm bài tập", "5. Chat",   "6. Game",
+                           "7. Voice Call",  "8. Xem phản hồi", "Thoát"};
+  for (int i = 0; i < 9; i++) {
     GtkWidget *btn = gtk_button_new_with_label(buttons[i]);
     g_signal_connect(btn, "clicked", G_CALLBACK(on_menu_btn_clicked),
                      GINT_TO_POINTER(i));

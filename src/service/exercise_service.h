@@ -30,22 +30,49 @@ public:
         const std::string& userId,
         const core::Exercise& exercise) override;
 
+    ServiceResult<core::ExerciseSubmission> saveDraft(
+        const std::string& userId,
+        const std::string& exerciseId,
+        const std::string& content,
+        const std::string& audioUrl = "") override;
+
     ServiceResult<core::ExerciseSubmission> submitExercise(
         const std::string& userId,
         const std::string& exerciseId,
-        const std::string& content) override;
+        const std::string& content,
+        const std::string& audioUrl = "") override;
 
     ServiceResult<SubmissionListResult> getUserSubmissions(
         const std::string& userId) override;
 
+    ServiceResult<SubmissionListResult> getUserDrafts(
+        const std::string& userId) override;
+
+    ServiceResult<core::ExerciseSubmission> getFeedback(
+        const std::string& userId,
+        const std::string& submissionId) override;
+
     ServiceResult<SubmissionListResult> getPendingSubmissions(
         const std::string& teacherId) override;
+
+    ServiceResult<SubmissionDetailResult> getSubmissionDetail(
+        const std::string& teacherId,
+        const std::string& submissionId) override;
 
     ServiceResult<core::ExerciseSubmission> reviewSubmission(
         const std::string& teacherId,
         const std::string& submissionId,
         const std::string& feedback,
         int score) override;
+
+    ServiceResult<core::ExerciseSubmission> reviewSubmissionWithScores(
+        const std::string& teacherId,
+        const std::string& submissionId,
+        const std::string& feedback,
+        const core::ScoreBreakdown& scores) override;
+
+    ServiceResult<ReviewStatistics> getReviewStatistics(
+        const std::string& teacherId) override;
 
     ServiceResult<core::Exercise> updateExercise(
         const std::string& userId,

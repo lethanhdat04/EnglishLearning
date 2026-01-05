@@ -27,6 +27,8 @@ public:
     virtual std::vector<core::Exercise> findAllExercises() const = 0;
     virtual std::vector<core::Exercise> findExercisesByLevel(const std::string& level) const = 0;
     virtual std::vector<core::Exercise> findExercisesByType(const std::string& type) const = 0;
+    virtual std::vector<core::Exercise> findExercisesByLevelAndType(
+        const std::string& level, const std::string& type) const = 0;
     virtual bool exerciseExists(const std::string& exerciseId) const = 0;
 
     // Update
@@ -51,6 +53,10 @@ public:
     virtual std::vector<core::ExerciseSubmission> findPendingSubmissions() const = 0;
     virtual std::vector<core::ExerciseSubmission> findReviewedSubmissions(
         const std::string& userId) const = 0;
+    virtual std::vector<core::ExerciseSubmission> findDraftsByUser(
+        const std::string& userId) const = 0;
+    virtual std::optional<core::ExerciseSubmission> findDraftByUserAndExercise(
+        const std::string& userId, const std::string& exerciseId) const = 0;
 
     // Update
     virtual bool updateSubmission(const core::ExerciseSubmission& submission) = 0;
@@ -59,11 +65,27 @@ public:
                                   const std::string& feedback,
                                   int score,
                                   int64_t reviewedAt) = 0;
+    virtual bool reviewSubmissionWithScores(const std::string& submissionId,
+                                            const std::string& teacherId,
+                                            const std::string& feedback,
+                                            const core::ScoreBreakdown& scores,
+                                            int64_t reviewedAt) = 0;
+    virtual bool saveDraft(const std::string& submissionId,
+                           const std::string& content,
+                           const std::string& audioUrl,
+                           int64_t updatedAt) = 0;
+    virtual bool submitForReview(const std::string& submissionId,
+                                 int64_t submittedAt) = 0;
+
+    // Delete
+    virtual bool removeSubmission(const std::string& submissionId) = 0;
 
     // Utility
     virtual size_t countExercises() const = 0;
     virtual size_t countSubmissions() const = 0;
     virtual size_t countPendingSubmissions() const = 0;
+    virtual size_t countDrafts(const std::string& userId) const = 0;
+    virtual int getAttemptCount(const std::string& userId, const std::string& exerciseId) const = 0;
 };
 
 } // namespace repository
