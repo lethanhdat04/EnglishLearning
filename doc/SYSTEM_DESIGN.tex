@@ -1,0 +1,1543 @@
+\documentclass[12pt,a4paper]{report}
+
+% ===== PACKAGES =====
+\usepackage[utf8]{inputenc}
+\usepackage[vietnamese]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tocloft}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% ===== PAGE SETUP =====
+\geometry{
+    left=3cm,
+    right=2cm,
+    top=2.5cm,
+    bottom=2.5cm
+}
+
+% ===== COLORS =====
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\definecolor{linkcolor}{rgb}{0,0.4,0.8}
+
+% ===== LISTINGS SETUP =====
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single
+}
+\lstset{style=mystyle}
+
+% JSON style
+\lstdefinelanguage{json}{
+    basicstyle=\ttfamily\footnotesize,
+    string=[s]{"}{"},
+    stringstyle=\color{codepurple},
+    comment=[l]{//},
+    commentstyle=\color{codegray},
+    morestring=[b]',
+}
+
+% ===== HYPERREF SETUP =====
+\hypersetup{
+    colorlinks=true,
+    linkcolor=linkcolor,
+    filecolor=magenta,
+    urlcolor=cyan,
+    pdftitle={Thiết Kế Chi Tiết Ứng Dụng Học Tiếng Anh},
+    pdfauthor={English Learning Team},
+}
+
+% ===== HEADER/FOOTER =====
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyhead[R]{English Learning Application}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+% ===== TITLE FORMAT =====
+\titleformat{\chapter}[display]
+{\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-20pt}{40pt}
+
+% ===== CUSTOM COMMANDS =====
+\newcommand{\checkmark}{\textcolor{green!70!black}{\ding{51}}}
+\newcommand{\crossmark}{\textcolor{red}{\ding{55}}}
+
+% ===== BEGIN DOCUMENT =====
+\begin{document}
+
+% ===== TITLE PAGE =====
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+
+    {\LARGE\bfseries TRƯỜNG ĐẠI HỌC CÔNG NGHỆ THÔNG TIN}\\[0.5cm]
+    {\Large KHOA MẠNG MÁY TÍNH VÀ TRUYỀN THÔNG}\\[2cm]
+
+    \rule{\textwidth}{1.5pt}\\[0.5cm]
+    {\Huge\bfseries THIẾT KẾ CHI TIẾT\\[0.3cm] ỨNG DỤNG HỌC TIẾNG ANH}\\[0.3cm]
+    \rule{\textwidth}{1.5pt}\\[1cm]
+
+    {\Large\textit{English Learning Application}}\\[0.5cm]
+    {\Large\textit{System Design Document}}\\[2cm]
+
+    {\large
+    \begin{tabular}{ll}
+        \textbf{Phiên bản:} & 1.0 \\
+        \textbf{Ngày cập nhật:} & Tháng 1/2026 \\
+    \end{tabular}
+    }\\[3cm]
+
+    \vfill
+    {\large Năm 2026}
+\end{titlepage}
+
+% ===== TABLE OF CONTENTS =====
+\tableofcontents
+\newpage
+
+% ===== CHAPTER 1: MÔ TẢ ỨNG DỤNG =====
+\chapter{Mô Tả Ứng Dụng}
+
+\section{Mục Đích Ứng Dụng}
+
+\textbf{English Learning Application} là một ứng dụng học tiếng Anh toàn diện, được thiết kế theo mô hình Client-Server, cung cấp các tính năng:
+
+\begin{itemize}
+    \item \textbf{Học bài (Lesson)}: Người dùng có thể truy cập các bài học theo cấp độ và chủ đề
+    \item \textbf{Làm bài thi (Test)}: Kiểm tra kiến thức với các câu hỏi trắc nghiệm, điền từ, sắp xếp câu
+    \item \textbf{Luyện tập (Exercise)}: Bài tập viết, phát âm với tính năng chấm điểm
+    \item \textbf{Trò chơi (Game)}: Học qua các mini-game như ghép từ, ghép hình
+    \item \textbf{Chat}: Giao tiếp real-time giữa học sinh và giáo viên
+    \item \textbf{Voice Call}: Gọi thoại để luyện phát âm
+\end{itemize}
+
+\section{Đối Tượng Sử Dụng}
+
+\begin{table}[H]
+\centering
+\caption{Đối tượng sử dụng hệ thống}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Vai trò} & \textbf{Mô tả} & \textbf{Quyền hạn} \\
+\hline
+Student & Học sinh, người học & Học bài, làm bài thi, luyện tập, chơi game, chat \\
+\hline
+Teacher & Giáo viên & Chấm bài, chat với học sinh, tạo nội dung \\
+\hline
+Admin & Quản trị viên & Toàn quyền quản lý hệ thống \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Phạm Vi và Bối Cảnh Sử Dụng}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.5cm,
+    box/.style={rectangle, draw, rounded corners, minimum width=3cm, minimum height=0.8cm, align=center},
+    server/.style={rectangle, draw, fill=blue!20, rounded corners, minimum width=2.5cm, minimum height=1cm, align=center}
+]
+    % Server
+    \node[server] (server) {Server};
+
+    % Clients
+    \node[box] (student1) [above left=2cm and 2cm of server] {Học sinh tại nhà};
+    \node[box] (student2) [left=3cm of server] {Học sinh tại lớp};
+    \node[box] (teacher) [below left=2cm and 2cm of server] {Giáo viên};
+    \node[box] (admin) [below=2cm of server] {Admin};
+
+    % Platforms
+    \node[box] (linux) [right=3cm of server] {Linux/WSL};
+    \node[box] (windows) [above right=1cm and 3cm of server] {Windows + GTK};
+    \node[box] (terminal) [below right=1cm and 3cm of server] {Terminal Client};
+
+    % Connections
+    \draw[->] (student1) -- node[above, sloped] {Internet} (server);
+    \draw[->] (student2) -- node[above] {LAN} (server);
+    \draw[->] (teacher) -- node[below, sloped] {Internet} (server);
+    \draw[->] (admin) -- (server);
+
+    \draw[->] (server) -- (linux);
+    \draw[->] (server) -- (windows);
+    \draw[->] (server) -- (terminal);
+\end{tikzpicture}
+\caption{Sơ đồ môi trường sử dụng}
+\end{figure}
+
+\textbf{Bối cảnh sử dụng:}
+\begin{itemize}
+    \item Môi trường giáo dục: trường học, trung tâm ngoại ngữ
+    \item Tự học tại nhà
+    \item Học từ xa (online learning)
+\end{itemize}
+
+% ===== CHAPTER 2: LUẬT CỦA TRÒ CHƠI =====
+\chapter{Luật Của Trò Chơi / Ứng Dụng}
+
+\section{Hệ Thống Cấp Độ (Level System)}
+
+\begin{table}[H]
+\centering
+\caption{Hệ thống cấp độ}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Cấp độ} & \textbf{Mô tả} & \textbf{Yêu cầu} \\
+\hline
+Beginner & Người mới bắt đầu & Mặc định khi đăng ký \\
+\hline
+Intermediate & Trung cấp & Hoàn thành các bài test beginner \\
+\hline
+Advanced & Nâng cao & Hoàn thành các bài test intermediate \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Luật Chơi Game}
+
+\subsection{Word Match (Ghép từ)}
+\begin{itemize}
+    \item \textbf{Mục tiêu}: Ghép từ tiếng Anh với nghĩa tiếng Việt
+    \item \textbf{Cách chơi}: Chọn từ cột trái, chọn nghĩa cột phải
+    \item \textbf{Điểm}: Mỗi cặp đúng được tính điểm
+    \item \textbf{Thời gian}: Giới hạn theo từng game
+\end{itemize}
+
+\subsection{Picture Match (Ghép hình)}
+\begin{itemize}
+    \item \textbf{Mục tiêu}: Ghép từ với hình ảnh tương ứng
+    \item \textbf{Cách chơi}: Click hình ảnh, sau đó click từ để ghép
+    \item \textbf{Điều kiện thắng}: Ghép đúng tất cả các cặp
+\end{itemize}
+
+\subsection{Sentence Match (Ghép câu)}
+\begin{itemize}
+    \item \textbf{Mục tiêu}: Ghép câu hỏi với câu trả lời phù hợp
+    \item \textbf{Cách chơi}: Nối các cặp câu tương ứng
+\end{itemize}
+
+\section{Luật Làm Bài Thi}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.2cm,
+    box/.style={rectangle, draw, rounded corners, minimum width=2.5cm, minimum height=0.7cm, align=center, font=\small},
+    decision/.style={diamond, draw, aspect=2, minimum width=1.5cm, align=center, font=\small},
+    arrow/.style={->, >=stealth}
+]
+    \node[box] (start) {Bắt đầu thi};
+    \node[box] (answer) [right=of start] {Trả lời câu hỏi};
+    \node[decision] (check) [right=of answer] {Còn câu?};
+    \node[box] (submit) [right=of check] {Nộp bài};
+    \node[box] (grade) [below=of submit] {Tính điểm};
+    \node[decision] (pass) [left=of grade] {$\geq$ 60\%?};
+    \node[box, fill=green!20] (passed) [below left=of pass] {PASS};
+    \node[box, fill=red!20] (failed) [below right=of pass] {FAIL};
+
+    \draw[arrow] (start) -- (answer);
+    \draw[arrow] (answer) -- (check);
+    \draw[arrow] (check) -- node[above] {Không} (submit);
+    \draw[arrow] (check) |- node[right, pos=0.25] {Có} ++(0,1) -| (answer);
+    \draw[arrow] (submit) -- (grade);
+    \draw[arrow] (grade) -- (pass);
+    \draw[arrow] (pass) -- node[above] {Có} (passed);
+    \draw[arrow] (pass) -- node[above] {Không} (failed);
+\end{tikzpicture}
+\caption{Quy trình làm bài thi}
+\end{figure}
+
+\textbf{Điều kiện Pass/Fail:}
+\begin{itemize}
+    \item \textbf{Pass}: Đạt từ 60\% điểm trở lên
+    \item \textbf{Fail}: Dưới 60\% điểm
+\end{itemize}
+
+\section{Ràng Buộc Hệ Thống}
+
+\begin{table}[H]
+\centering
+\caption{Các ràng buộc hệ thống}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Ràng buộc} & \textbf{Mô tả} \\
+\hline
+Xác thực & Phải đăng nhập để sử dụng các chức năng \\
+\hline
+Session & Session hết hạn sau 1 giờ không hoạt động \\
+\hline
+Cấp độ & Chỉ xem được nội dung phù hợp với cấp độ \\
+\hline
+Phân quyền & Student không thể truy cập chức năng Teacher \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== CHAPTER 3: KIẾN TRÚC HỆ THỐNG =====
+\chapter{Kiến Trúc Hệ Thống}
+
+\section{Mô Tả Kiến Trúc Tổng Thể}
+
+Hệ thống được thiết kế theo \textbf{kiến trúc Client-Server} với các đặc điểm:
+
+\begin{itemize}
+    \item \textbf{Layered Architecture}: Phân tầng rõ ràng (Presentation, Service, Repository, Data)
+    \item \textbf{Protocol-based Communication}: Giao tiếp qua TCP Socket với JSON messages
+    \item \textbf{Stateful Server}: Server duy trì trạng thái session và kết nối
+\end{itemize}
+
+\section{Sơ Đồ Kiến Trúc Tổng Thể}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    scale=0.85,
+    transform shape,
+    layer/.style={rectangle, draw, rounded corners, minimum width=12cm, minimum height=1.5cm, align=center},
+    component/.style={rectangle, draw, fill=blue!10, rounded corners, minimum width=2cm, minimum height=0.6cm, align=center, font=\footnotesize},
+    arrow/.style={->, >=stealth, thick}
+]
+    % Client Layer
+    \node[layer, fill=green!10] (client) at (0,6) {};
+    \node at (-4,6) {\textbf{Client Layer}};
+    \node[component] (gui) at (-2,6) {GUI Client\\(GTK3)};
+    \node[component] (cli) at (2,6) {Terminal Client\\(Console)};
+
+    % Network Layer
+    \node[layer, fill=yellow!10] (network) at (0,4.5) {};
+    \node at (-4,4.5) {\textbf{Network}};
+    \node[component] (tcp) at (0,4.5) {TCP Socket\\Port 8888};
+
+    % Server Presentation
+    \node[layer, fill=orange!10] (presentation) at (0,3) {};
+    \node at (-4,3) {\textbf{Presentation}};
+    \node[component] (handlers) at (0,3) {Message Handlers};
+
+    % Service Layer
+    \node[layer, fill=purple!10, minimum height=2cm] (service) at (0,1) {};
+    \node at (-4,1.5) {\textbf{Service Layer}};
+    \node[component] (auth) at (-4,0.7) {Auth};
+    \node[component] (lesson) at (-2,0.7) {Lesson};
+    \node[component] (test) at (0,0.7) {Test};
+    \node[component] (exercise) at (2,0.7) {Exercise};
+    \node[component] (game) at (-3,0) {Game};
+    \node[component] (chat) at (-0.5,0) {Chat};
+    \node[component] (voice) at (2,0) {Voice};
+
+    % Repository Layer
+    \node[layer, fill=cyan!10] (repository) at (0,-1.5) {};
+    \node at (-4,-1.5) {\textbf{Repository}};
+    \node[component] (userrepo) at (-2,-1.5) {User Repo};
+    \node[component] (datarepo) at (2,-1.5) {Data Repos};
+
+    % Data Layer
+    \node[layer, fill=gray!10] (data) at (0,-3) {};
+    \node at (-4,-3) {\textbf{Data Layer}};
+    \node[component, fill=gray!30] (mem) at (0,-3) {In-Memory Data Store};
+
+    % Arrows
+    \draw[arrow] (gui) -- (tcp);
+    \draw[arrow] (cli) -- (tcp);
+    \draw[arrow] (tcp) -- (handlers);
+    \draw[arrow] (handlers) -- (service);
+    \draw[arrow] (service) -- (repository);
+    \draw[arrow] (repository) -- (data);
+\end{tikzpicture}
+\caption{Sơ đồ kiến trúc tổng thể hệ thống}
+\end{figure}
+
+\section{Vai Trò Từng Thành Phần}
+
+\subsection{Client Layer}
+
+\begin{table}[H]
+\centering
+\caption{Thành phần Client Layer}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Component} & \textbf{Vai trò} & \textbf{Công nghệ} \\
+\hline
+GUI Client & Giao diện đồ họa cho người dùng & GTK3, C++ \\
+\hline
+Terminal Client & Giao diện dòng lệnh & C++, POSIX \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Server Layer}
+
+\begin{table}[H]
+\centering
+\caption{Thành phần Server Layer}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Layer} & \textbf{Component} & \textbf{Vai trò} \\
+\hline
+Presentation & Message Handlers & Parse JSON, routing requests \\
+\hline
+Service & Business Services & Xử lý logic nghiệp vụ \\
+\hline
+Repository & Data Repositories & Truy xuất và lưu trữ dữ liệu \\
+\hline
+Data & In-Memory Store & Lưu trữ dữ liệu tạm thời \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== CHAPTER 4: CHỨC NĂNG CỦA HỆ THỐNG =====
+\chapter{Chức Năng Của Hệ Thống}
+
+\section{Chức Năng Phía Client}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    mindmap,
+    grow cyclic,
+    every node/.style={concept, execute at begin node=\hskip0pt},
+    concept color=blue!30,
+    level 1/.append style={level distance=4cm, sibling angle=60},
+    level 2/.append style={level distance=2.5cm, sibling angle=45, font=\footnotesize}
+]
+    \node{Client}
+        child[concept color=green!30] { node {Authentication}
+            child { node {Đăng ký} }
+            child { node {Đăng nhập} }
+            child { node {Đăng xuất} }
+        }
+        child[concept color=orange!30] { node {Learning}
+            child { node {Xem bài học} }
+            child { node {Multimedia} }
+        }
+        child[concept color=red!30] { node {Testing}
+            child { node {Làm bài thi} }
+            child { node {Xem kết quả} }
+        }
+        child[concept color=purple!30] { node {Exercise}
+            child { node {Luyện viết} }
+            child { node {Luyện phát âm} }
+        }
+        child[concept color=cyan!30] { node {Game}
+            child { node {Word Match} }
+            child { node {Picture Match} }
+        }
+        child[concept color=yellow!50] { node {Communication}
+            child { node {Chat} }
+            child { node {Voice Call} }
+        };
+\end{tikzpicture}
+\caption{Sơ đồ chức năng phía Client}
+\end{figure}
+
+\section{Chức Năng Phía Server}
+
+\begin{table}[H]
+\centering
+\caption{Chức năng phía Server}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Module} & \textbf{Chức năng} & \textbf{Mô tả} \\
+\hline
+Authentication & Xác thực người dùng & Register, Login, Session management \\
+\hline
+Lesson Management & Quản lý bài học & CRUD lessons, filter by level/topic \\
+\hline
+Test Management & Quản lý bài thi & Tạo test, chấm điểm tự động \\
+\hline
+Exercise Management & Quản lý bài tập & Submit, review, grading \\
+\hline
+Game Management & Quản lý trò chơi & Game sessions, scoring \\
+\hline
+Chat Service & Quản lý chat & Real-time messaging, history \\
+\hline
+Voice Call Service & Quản lý cuộc gọi & Call signaling, status \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Phân Quyền Người Dùng}
+
+\begin{table}[H]
+\centering
+\caption{Ma trận phân quyền}
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Chức năng} & \textbf{Student} & \textbf{Teacher} & \textbf{Admin} \\
+\hline
+Đăng ký/Đăng nhập & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+\hline
+Xem bài học & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+\hline
+Làm bài thi & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+\hline
+Làm bài tập & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+\hline
+Chơi game & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+\hline
+Chat & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+\hline
+Voice Call & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+\hline
+Chấm bài & $\times$ & $\checkmark$ & $\checkmark$ \\
+\hline
+Tạo nội dung & $\times$ & $\checkmark$ & $\checkmark$ \\
+\hline
+Quản lý users & $\times$ & $\times$ & $\checkmark$ \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== CHAPTER 5: USE CASE =====
+\chapter{Use Case}
+
+\section{Use Case Diagram}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    actor/.style={circle, draw, minimum size=1cm},
+    usecase/.style={ellipse, draw, minimum width=3cm, minimum height=1cm, align=center, font=\small},
+    arrow/.style={->, >=stealth}
+]
+    % Actors
+    \node[actor, label=below:Student] (student) at (-6,0) {};
+    \node[actor, label=below:Teacher] (teacher) at (6,2) {};
+    \node[actor, label=below:Admin] (admin) at (6,-2) {};
+
+    % Use Cases - Authentication
+    \node[usecase] (uc1) at (0,4) {UC01: Đăng ký};
+    \node[usecase] (uc2) at (0,2.5) {UC02: Đăng nhập};
+
+    % Use Cases - Learning
+    \node[usecase] (uc4) at (0,1) {UC04: Xem bài học};
+    \node[usecase] (uc5) at (0,-0.5) {UC05: Làm bài thi};
+    \node[usecase] (uc6) at (0,-2) {UC06: Làm bài tập};
+    \node[usecase] (uc7) at (0,-3.5) {UC07: Chơi game};
+
+    % Use Cases - Communication
+    \node[usecase] (uc8) at (-3,-5) {UC08: Chat};
+    \node[usecase] (uc9) at (3,-5) {UC09: Voice Call};
+
+    % Use Cases - Teacher
+    \node[usecase] (uc10) at (3,4) {UC10: Chấm bài};
+
+    % Connections - Student
+    \draw[arrow] (student) -- (uc1);
+    \draw[arrow] (student) -- (uc2);
+    \draw[arrow] (student) -- (uc4);
+    \draw[arrow] (student) -- (uc5);
+    \draw[arrow] (student) -- (uc6);
+    \draw[arrow] (student) -- (uc7);
+    \draw[arrow] (student) -- (uc8);
+    \draw[arrow] (student) -- (uc9);
+
+    % Connections - Teacher
+    \draw[arrow] (teacher) -- (uc2);
+    \draw[arrow] (teacher) -- (uc8);
+    \draw[arrow] (teacher) -- (uc10);
+
+    % Connections - Admin
+    \draw[arrow] (admin) -- (uc2);
+    \draw[arrow] (admin) -- (uc10);
+\end{tikzpicture}
+\caption{Use Case Diagram}
+\end{figure}
+
+\section{Danh Sách Use Case Chính}
+
+\begin{table}[H]
+\centering
+\caption{Danh sách Use Case}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{ID} & \textbf{Use Case} & \textbf{Actor} & \textbf{Mô tả} \\
+\hline
+UC01 & Đăng ký & Student & Tạo tài khoản mới \\
+\hline
+UC02 & Đăng nhập & All & Xác thực và truy cập hệ thống \\
+\hline
+UC03 & Đăng xuất & All & Kết thúc phiên làm việc \\
+\hline
+UC04 & Xem bài học & Student & Truy cập nội dung học tập \\
+\hline
+UC05 & Làm bài thi & Student & Kiểm tra kiến thức \\
+\hline
+UC06 & Làm bài tập & Student & Luyện tập và nộp bài \\
+\hline
+UC07 & Chơi game & Student & Học qua trò chơi \\
+\hline
+UC08 & Chat & All & Giao tiếp real-time \\
+\hline
+UC09 & Voice Call & All & Gọi thoại \\
+\hline
+UC10 & Chấm bài & Teacher & Đánh giá bài làm học sinh \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Mô Tả Chi Tiết Use Case}
+
+\subsection{UC02: Đăng nhập}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|p{10cm}|}
+\hline
+\textbf{Thuộc tính} & \textbf{Mô tả} \\
+\hline
+Actor & Student, Teacher, Admin \\
+\hline
+Precondition & Đã có tài khoản trong hệ thống \\
+\hline
+Main Flow &
+\begin{enumerate}[noitemsep]
+    \item User nhập email và password
+    \item Client gửi LOGIN\_REQUEST
+    \item Server xác thực
+    \item Server trả về session token
+    \item Client lưu token và chuyển màn hình
+\end{enumerate} \\
+\hline
+Alternative Flow & 3a. Sai thông tin $\rightarrow$ Hiển thị lỗi \\
+\hline
+Postcondition & User đã đăng nhập, có session token \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== CHAPTER 6: QUY TRÌNH HOẠT ĐỘNG =====
+\chapter{Quy Trình Hoạt Động Của Từng Chức Năng}
+
+\section{Quy Trình Đăng Nhập}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1cm,
+    box/.style={rectangle, draw, rounded corners, minimum width=2.5cm, minimum height=0.6cm, align=center, font=\small},
+    decision/.style={diamond, draw, aspect=2, align=center, font=\small},
+    arrow/.style={->, >=stealth}
+]
+    \node[box] (open) {Mở ứng dụng};
+    \node[box] (form) [below=of open] {Hiển thị form đăng nhập};
+    \node[box] (input) [below=of form] {Nhập email/password};
+    \node[box] (click) [below=of input] {Click Đăng nhập};
+    \node[box] (send) [below=of click] {Gửi LOGIN\_REQUEST};
+    \node[decision] (auth) [below=of send] {Server xác thực};
+    \node[box] (token) [below left=1cm and 1cm of auth] {Nhận session token};
+    \node[box, fill=red!20] (error) [below right=1cm and 1cm of auth] {Hiển thị lỗi};
+    \node[box] (save) [below=of token] {Lưu token};
+    \node[decision] (role) [below=of save] {Role?};
+    \node[box, fill=green!20] (student) [below left=of role] {Menu Student};
+    \node[box, fill=blue!20] (teacher) [below right=of role] {Menu Teacher};
+
+    \draw[arrow] (open) -- (form);
+    \draw[arrow] (form) -- (input);
+    \draw[arrow] (input) -- (click);
+    \draw[arrow] (click) -- (send);
+    \draw[arrow] (send) -- (auth);
+    \draw[arrow] (auth) -- node[left] {OK} (token);
+    \draw[arrow] (auth) -- node[right] {Fail} (error);
+    \draw[arrow] (token) -- (save);
+    \draw[arrow] (save) -- (role);
+    \draw[arrow] (role) -- node[left] {Student} (student);
+    \draw[arrow] (role) -- node[right] {Teacher} (teacher);
+    \draw[arrow] (error) -- ++(2,0) |- (input);
+\end{tikzpicture}
+\caption{Quy trình đăng nhập}
+\end{figure}
+
+\section{Quy Trình Làm Bài Thi}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.8cm,
+    box/.style={rectangle, draw, rounded corners, minimum width=2.8cm, minimum height=0.6cm, align=center, font=\footnotesize},
+    decision/.style={diamond, draw, aspect=2, align=center, font=\footnotesize},
+    arrow/.style={->, >=stealth}
+]
+    \node[box] (choose) {Chọn Làm bài thi};
+    \node[box] (request) [right=of choose] {GET\_TEST\_REQUEST};
+    \node[box] (receive) [right=of request] {Nhận dữ liệu test};
+    \node[box] (display) [below=of receive] {Hiển thị câu hỏi};
+    \node[box] (answer) [left=of display] {User trả lời};
+    \node[decision] (more) [left=of answer] {Còn câu?};
+    \node[box] (submit) [below=of more] {Click Nộp bài};
+    \node[box] (send) [right=of submit] {SUBMIT\_TEST\_REQUEST};
+    \node[box] (grade) [right=of send] {Server chấm điểm};
+    \node[box] (result) [below=of grade] {Nhận kết quả};
+    \node[box, fill=green!20] (show) [left=of result] {Hiển thị điểm};
+
+    \draw[arrow] (choose) -- (request);
+    \draw[arrow] (request) -- (receive);
+    \draw[arrow] (receive) -- (display);
+    \draw[arrow] (display) -- (answer);
+    \draw[arrow] (answer) -- (more);
+    \draw[arrow] (more) -- node[left] {Không} (submit);
+    \draw[arrow] (more) -- ++(0,1) -| node[above, pos=0.25] {Có} (display);
+    \draw[arrow] (submit) -- (send);
+    \draw[arrow] (send) -- (grade);
+    \draw[arrow] (grade) -- (result);
+    \draw[arrow] (result) -- (show);
+\end{tikzpicture}
+\caption{Quy trình làm bài thi}
+\end{figure}
+
+% ===== CHAPTER 7: BIỂU ĐỒ TRÌNH TỰ =====
+\chapter{Biểu Đồ Trình Tự (Sequence Diagram)}
+
+\section{Sequence Diagram: Đăng Nhập}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    font=\small,
+    lifeline/.style={dashed},
+    message/.style={->, >=stealth},
+    return/.style={->, >=stealth, dashed}
+]
+    % Actors
+    \node (user) at (0,0) {User};
+    \node (client) at (3,0) {Client};
+    \node (server) at (6,0) {Server};
+    \node (db) at (9,0) {Data Store};
+
+    % Lifelines
+    \draw[lifeline] (0,-0.5) -- (0,-10);
+    \draw[lifeline] (3,-0.5) -- (3,-10);
+    \draw[lifeline] (6,-0.5) -- (6,-10);
+    \draw[lifeline] (9,-0.5) -- (9,-10);
+
+    % Messages
+    \draw[message] (0,-1) -- node[above] {Nhập email, password} (3,-1);
+    \draw[message] (0,-1.5) -- node[above] {Click Đăng nhập} (3,-1.5);
+    \draw[message] (3,-2) -- node[above] {LOGIN\_REQUEST} (6,-2);
+    \draw[message] (6,-2.5) -- node[above] {Tìm user} (9,-2.5);
+    \draw[return] (9,-3) -- node[above] {User data} (6,-3);
+
+    % Alt box
+    \draw[thick] (2,-3.5) rectangle (10,-7);
+    \node[anchor=north west] at (2,-3.5) {\textbf{alt} [Password đúng]};
+
+    \draw[message] (6,-4) -- node[above] {Tạo session} (9,-4);
+    \draw[return] (9,-4.5) -- node[above] {Token} (6,-4.5);
+    \draw[return] (6,-5) -- node[above] {LOGIN\_RESPONSE \{success\}} (3,-5);
+    \draw[message] (3,-5.5) -- node[above, font=\footnotesize] {Lưu token} (3,-5.5);
+    \draw[return] (3,-6) -- node[above] {Hiển thị menu} (0,-6);
+
+    \draw[dashed] (2,-6.5) -- (10,-6.5);
+    \node[anchor=west] at (2,-6.7) {[else]};
+
+    \draw[return] (6,-7.5) -- node[above] {LOGIN\_RESPONSE \{error\}} (3,-7.5);
+    \draw[return] (3,-8) -- node[above] {Hiển thị lỗi} (0,-8);
+\end{tikzpicture}
+\caption{Sequence Diagram: Đăng nhập}
+\end{figure}
+
+\section{Sequence Diagram: Chat Real-time}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    font=\small,
+    lifeline/.style={dashed},
+    message/.style={->, >=stealth},
+    return/.style={->, >=stealth, dashed}
+]
+    % Actors
+    \node (userA) at (0,0) {User A};
+    \node (clientA) at (2.5,0) {Client A};
+    \node (server) at (5.5,0) {Server};
+    \node (clientB) at (8.5,0) {Client B};
+    \node (userB) at (11,0) {User B};
+
+    % Lifelines
+    \draw[lifeline] (0,-0.5) -- (0,-8);
+    \draw[lifeline] (2.5,-0.5) -- (2.5,-8);
+    \draw[lifeline] (5.5,-0.5) -- (5.5,-8);
+    \draw[lifeline] (8.5,-0.5) -- (8.5,-8);
+    \draw[lifeline] (11,-0.5) -- (11,-8);
+
+    % Messages
+    \draw[message] (0,-1) -- node[above, font=\footnotesize] {Nhập tin nhắn} (2.5,-1);
+    \draw[message] (0,-1.5) -- node[above, font=\footnotesize] {Click Gửi} (2.5,-1.5);
+    \draw[message] (2.5,-2) -- node[above, font=\footnotesize] {SEND\_MESSAGE} (5.5,-2);
+    \draw[message] (5.5,-2.5) -- node[above, font=\footnotesize] {Lưu message} (5.5,-2.5);
+    \draw[return] (5.5,-3) -- node[above, font=\footnotesize] {RESPONSE \{ok\}} (2.5,-3);
+
+    % Alt box
+    \draw[thick] (4,-3.5) rectangle (12,-7);
+    \node[anchor=north west] at (4,-3.5) {\textbf{alt} [User B online]};
+
+    \draw[message] (5.5,-4) -- node[above, font=\footnotesize] {NOTIFICATION} (8.5,-4);
+    \draw[return] (8.5,-4.5) -- node[above, font=\footnotesize] {Hiển thị tin nhắn} (11,-4.5);
+    \draw[message] (8.5,-5) -- node[above, font=\footnotesize] {Phát âm thanh} (8.5,-5);
+
+    \draw[dashed] (4,-5.5) -- (12,-5.5);
+    \node[anchor=west] at (4,-5.7) {[else offline]};
+
+    \draw[message] (5.5,-6.5) -- node[above, font=\footnotesize] {Queue message} (5.5,-6.5);
+\end{tikzpicture}
+\caption{Sequence Diagram: Chat Real-time}
+\end{figure}
+
+% ===== CHAPTER 8: THIẾT KẾ BẢN TIN =====
+\chapter{Thiết Kế Bản Tin (Message Design)}
+
+\section{Tổng Quan Các Loại Bản Tin}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    box/.style={rectangle, draw, rounded corners, minimum width=3.5cm, minimum height=0.5cm, align=center, font=\footnotesize},
+    category/.style={rectangle, draw, fill=gray!20, rounded corners, minimum width=4cm, minimum height=0.6cm, align=center, font=\small\bfseries}
+]
+    % Request Messages
+    \node[category] (req) at (0,0) {Request Messages};
+    \node[box] (r1) at (0,-0.7) {LOGIN\_REQUEST};
+    \node[box] (r2) at (0,-1.3) {REGISTER\_REQUEST};
+    \node[box] (r3) at (0,-1.9) {GET\_LESSONS\_REQUEST};
+    \node[box] (r4) at (0,-2.5) {SUBMIT\_TEST\_REQUEST};
+    \node[box] (r5) at (0,-3.1) {SEND\_MESSAGE\_REQUEST};
+
+    % Response Messages
+    \node[category] (resp) at (5,0) {Response Messages};
+    \node[box] (p1) at (5,-0.7) {LOGIN\_RESPONSE};
+    \node[box] (p2) at (5,-1.3) {REGISTER\_RESPONSE};
+    \node[box] (p3) at (5,-1.9) {GET\_LESSONS\_RESPONSE};
+    \node[box] (p4) at (5,-2.5) {SUBMIT\_TEST\_RESPONSE};
+    \node[box] (p5) at (5,-3.1) {SEND\_MESSAGE\_RESPONSE};
+
+    % Notification Messages
+    \node[category] (notif) at (10,0) {Notification Messages};
+    \node[box] (n1) at (10,-0.7) {CHAT\_MESSAGE\_NOTIFICATION};
+    \node[box] (n2) at (10,-1.3) {INCOMING\_CALL\_NOTIFICATION};
+    \node[box] (n3) at (10,-1.9) {CALL\_ACCEPTED\_NOTIFICATION};
+    \node[box] (n4) at (10,-2.5) {CALL\_ENDED\_NOTIFICATION};
+    \node[box] (n5) at (10,-3.1) {UNREAD\_MESSAGES\_NOTIFICATION};
+\end{tikzpicture}
+\caption{Phân loại các bản tin}
+\end{figure}
+
+\section{Phân Loại Bản Tin}
+
+\begin{table}[H]
+\centering
+\caption{Phân loại bản tin}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Loại} & \textbf{Mô tả} & \textbf{Hướng} & \textbf{Ví dụ} \\
+\hline
+Request & Yêu cầu từ Client & Client $\rightarrow$ Server & LOGIN\_REQUEST \\
+\hline
+Response & Phản hồi từ Server & Server $\rightarrow$ Client & LOGIN\_RESPONSE \\
+\hline
+Notification & Thông báo push & Server $\rightarrow$ Client & CHAT\_MESSAGE\_NOTIFICATION \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Chi Tiết Từng Loại Bản Tin}
+
+\subsection{Authentication Messages}
+
+\begin{table}[H]
+\centering
+\caption{Authentication Messages}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Message Type} & \textbf{Sender} & \textbf{Receiver} & \textbf{Mục đích} \\
+\hline
+REGISTER\_REQUEST & Client & Server & Đăng ký tài khoản mới \\
+\hline
+REGISTER\_RESPONSE & Server & Client & Kết quả đăng ký \\
+\hline
+LOGIN\_REQUEST & Client & Server & Xác thực người dùng \\
+\hline
+LOGIN\_RESPONSE & Server & Client & Token và thông tin user \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Chat Messages}
+
+\begin{table}[H]
+\centering
+\caption{Chat Messages}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Message Type} & \textbf{Sender} & \textbf{Receiver} & \textbf{Mục đích} \\
+\hline
+SEND\_MESSAGE\_REQUEST & Client & Server & Gửi tin nhắn \\
+\hline
+SEND\_MESSAGE\_RESPONSE & Server & Client & Xác nhận đã gửi \\
+\hline
+CHAT\_MESSAGE\_NOTIFICATION & Server & Client & Thông báo tin nhắn mới \\
+\hline
+GET\_CHAT\_HISTORY\_REQUEST & Client & Server & Lấy lịch sử chat \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Voice Call Messages}
+
+\begin{table}[H]
+\centering
+\caption{Voice Call Messages}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Message Type} & \textbf{Sender} & \textbf{Receiver} & \textbf{Mục đích} \\
+\hline
+INITIATE\_CALL\_REQUEST & Client & Server & Khởi tạo cuộc gọi \\
+\hline
+INCOMING\_CALL\_NOTIFICATION & Server & Client & Báo có cuộc gọi đến \\
+\hline
+ACCEPT\_CALL\_REQUEST & Client & Server & Chấp nhận cuộc gọi \\
+\hline
+REJECT\_CALL\_REQUEST & Client & Server & Từ chối cuộc gọi \\
+\hline
+END\_CALL\_REQUEST & Client & Server & Kết thúc cuộc gọi \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== CHAPTER 9: FORMAT CỦA BẢN TIN =====
+\chapter{Format Của Bản Tin}
+
+\section{Định Dạng Tổng Quát}
+
+Tất cả bản tin sử dụng \textbf{JSON format} với cấu trúc:
+
+\begin{lstlisting}[language=json, caption=Cấu trúc bản tin tổng quát]
+{
+    "messageType": "MESSAGE_TYPE_NAME",
+    "messageId": "unique_id",
+    "timestamp": 1704067200000,
+    "sessionToken": "token_string",
+    "payload": {
+        // Du lieu cu the
+    }
+}
+\end{lstlisting}
+
+\section{Cấu Trúc Chung}
+
+\begin{table}[H]
+\centering
+\caption{Cấu trúc các trường trong bản tin}
+\begin{tabular}{|l|l|c|l|}
+\hline
+\textbf{Trường} & \textbf{Kiểu} & \textbf{Bắt buộc} & \textbf{Mô tả} \\
+\hline
+messageType & string & $\checkmark$ & Loại bản tin \\
+\hline
+messageId & string & & ID duy nhất của message \\
+\hline
+timestamp & int64 & & Unix timestamp (ms) \\
+\hline
+sessionToken & string & & Token xác thực \\
+\hline
+payload & object & $\checkmark$ & Dữ liệu chi tiết \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Chi Tiết Format Từng Bản Tin}
+
+\subsection{LOGIN\_REQUEST}
+
+\begin{lstlisting}[language=json, caption=LOGIN\_REQUEST]
+{
+    "messageType": "LOGIN_REQUEST",
+    "payload": {
+        "email": "student@example.com",
+        "password": "password123"
+    }
+}
+\end{lstlisting}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Trường} & \textbf{Kiểu} & \textbf{Mô tả} \\
+\hline
+email & string & Email đăng nhập \\
+\hline
+password & string & Mật khẩu \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{LOGIN\_RESPONSE}
+
+\begin{lstlisting}[language=json, caption=LOGIN\_RESPONSE]
+{
+    "messageType": "LOGIN_RESPONSE",
+    "messageId": "msg_001",
+    "timestamp": 1704067200000,
+    "payload": {
+        "status": "success",
+        "message": "Login successfully",
+        "data": {
+            "userId": "user_001",
+            "fullname": "Nguyen Van A",
+            "email": "student@example.com",
+            "level": "beginner",
+            "role": "student",
+            "sessionToken": "abc123xyz",
+            "expiresAt": 1704070800000
+        }
+    }
+}
+\end{lstlisting}
+
+\subsection{CHAT\_MESSAGE\_NOTIFICATION}
+
+\begin{lstlisting}[language=json, caption=CHAT\_MESSAGE\_NOTIFICATION]
+{
+    "messageType": "CHAT_MESSAGE_NOTIFICATION",
+    "timestamp": 1704067200000,
+    "payload": {
+        "senderId": "user_002",
+        "senderName": "Teacher A",
+        "messageContent": "Hello, how are you?",
+        "sentAt": 1704067200000
+    }
+}
+\end{lstlisting}
+
+\subsection{Error Response Format}
+
+\begin{lstlisting}[language=json, caption=Error Response]
+{
+    "messageType": "ERROR_RESPONSE",
+    "payload": {
+        "status": "error",
+        "errorCode": "AUTH_001",
+        "message": "Invalid email or password"
+    }
+}
+\end{lstlisting}
+
+\begin{table}[H]
+\centering
+\caption{Danh sách Error Codes}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Error Code} & \textbf{Mô tả} \\
+\hline
+AUTH\_001 & Sai email/password \\
+\hline
+AUTH\_002 & Session hết hạn \\
+\hline
+AUTH\_003 & Không có quyền truy cập \\
+\hline
+DATA\_001 & Không tìm thấy dữ liệu \\
+\hline
+DATA\_002 & Dữ liệu không hợp lệ \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== CHAPTER 10: LUỒNG BẢN TIN =====
+\chapter{Luồng Bản Tin Trong Từng Chức Năng}
+
+\section{Luồng Đăng Nhập}
+
+\begin{enumerate}
+    \item \textbf{Client gửi request:} LOGIN\_REQUEST với email và password
+    \item \textbf{Server xử lý:}
+    \begin{itemize}
+        \item Validate email/password
+        \item Tạo session token nếu hợp lệ
+    \end{itemize}
+    \item \textbf{Response:}
+    \begin{itemize}
+        \item Thành công: LOGIN\_RESPONSE \{status: success, token, role\}
+        \item Thất bại: LOGIN\_RESPONSE \{status: error, message\}
+    \end{itemize}
+    \item \textbf{Client xử lý:}
+    \begin{itemize}
+        \item Thành công: Lưu token, chuyển màn hình theo role
+        \item Thất bại: Hiển thị thông báo lỗi
+    \end{itemize}
+\end{enumerate}
+
+\section{Luồng Chat}
+
+\begin{enumerate}
+    \item \textbf{Client A gửi:} SEND\_MESSAGE\_REQUEST \{recipientId, content\}
+    \item \textbf{Server xử lý:}
+    \begin{itemize}
+        \item Validate session
+        \item Lưu message vào database
+    \end{itemize}
+    \item \textbf{Response cho A:} SEND\_MESSAGE\_RESPONSE \{success\}
+    \item \textbf{Forward đến B:} CHAT\_MESSAGE\_NOTIFICATION \{senderId, content\}
+    \item \textbf{Client B xử lý:}
+    \begin{itemize}
+        \item Update UI
+        \item Phát âm thanh thông báo
+    \end{itemize}
+\end{enumerate}
+
+\section{Xử Lý Lỗi}
+
+\begin{table}[H]
+\centering
+\caption{Xử lý lỗi trong các tình huống}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Tình huống} & \textbf{Client xử lý} & \textbf{Server xử lý} \\
+\hline
+Session hết hạn & Chuyển về màn hình login & Trả về AUTH\_002 error \\
+\hline
+Network timeout & Retry 3 lần, hiển thị lỗi & Log error \\
+\hline
+Invalid data & Validate trước khi gửi & Reject và trả error \\
+\hline
+User offline & Hiển thị trạng thái offline & Queue notification \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== CHAPTER 11: XỬ LÝ BẢN TIN =====
+\chapter{Xử Lý Bản Tin Phía Client / Server}
+
+\section{Xử Lý Phía Client}
+
+\subsection{Nhận và Parse Message}
+
+\begin{lstlisting}[language=C++, caption=Pseudocode xử lý message phía Client]
+void handleServerMessage(string rawMessage) {
+    // 1. Parse JSON
+    string messageType = getJsonValue(rawMessage, "messageType");
+    string payload = getJsonObject(rawMessage, "payload");
+
+    // 2. Route den handler phu hop
+    switch(messageType) {
+        case "LOGIN_RESPONSE":
+            handleLoginResponse(payload);
+            break;
+        case "CHAT_MESSAGE_NOTIFICATION":
+            handleChatNotification(payload);
+            break;
+        case "INCOMING_CALL_NOTIFICATION":
+            handleIncomingCall(payload);
+            break;
+        // ...
+    }
+}
+\end{lstlisting}
+
+\subsection{Xử Lý Response}
+
+\begin{table}[H]
+\centering
+\caption{Xử lý Response theo loại}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Response Type} & \textbf{Xử lý khi Success} & \textbf{Xử lý khi Error} \\
+\hline
+LOGIN\_RESPONSE & Lưu token, role; chuyển màn hình & Hiển thị "Sai mật khẩu" \\
+\hline
+SUBMIT\_TEST\_RESPONSE & Hiển thị điểm, chi tiết & Hiển thị lỗi, cho làm lại \\
+\hline
+SEND\_MESSAGE\_RESPONSE & Đánh dấu đã gửi & Retry hoặc báo lỗi \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Xử Lý Phía Server}
+
+\subsection{Message Handler Architecture}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.8cm,
+    box/.style={rectangle, draw, rounded corners, minimum width=2.5cm, minimum height=0.6cm, align=center, font=\small},
+    arrow/.style={->, >=stealth}
+]
+    \node[box] (recv) {Nhận raw message};
+    \node[box] (parse) [below=of recv] {Parse JSON};
+    \node[box] (extract) [below=of parse] {Extract messageType};
+    \node[box] (route) [below=of extract] {Route to handler};
+
+    \node[box] (h1) [below left=1cm and 1cm of route] {handleLogin};
+    \node[box] (h2) [below=of route] {handleRegister};
+    \node[box] (h3) [below right=1cm and 1cm of route] {handleChat};
+
+    \node[box] (build) [below=2cm of route] {Build response};
+    \node[box] (send) [below=of build] {Send to client};
+
+    \draw[arrow] (recv) -- (parse);
+    \draw[arrow] (parse) -- (extract);
+    \draw[arrow] (extract) -- (route);
+    \draw[arrow] (route) -- (h1);
+    \draw[arrow] (route) -- (h2);
+    \draw[arrow] (route) -- (h3);
+    \draw[arrow] (h1) |- (build);
+    \draw[arrow] (h2) -- (build);
+    \draw[arrow] (h3) |- (build);
+    \draw[arrow] (build) -- (send);
+\end{tikzpicture}
+\caption{Message Handler Architecture}
+\end{figure}
+
+\subsection{Xử Lý Request}
+
+\begin{lstlisting}[language=C++, caption=Pseudocode xử lý Login phía Server]
+string handleLogin(string json, int clientSocket) {
+    // 1. Parse payload
+    string email = getJsonValue(payload, "email");
+    string password = getJsonValue(payload, "password");
+
+    // 2. Validate
+    User* user = findUserByEmail(email);
+    if (!user || user->password != password) {
+        return buildErrorResponse("Invalid credentials");
+    }
+
+    // 3. Create session
+    string token = generateSessionToken();
+    createSession(token, user->userId);
+
+    // 4. Build response
+    return buildLoginResponse(user, token);
+}
+\end{lstlisting}
+
+\section{Kiểm Tra Lỗi và Bảo Mật}
+
+\subsection{Validation Rules}
+
+\begin{table}[H]
+\centering
+\caption{Validation Rules}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Kiểm tra} & \textbf{Client} & \textbf{Server} \\
+\hline
+Email format & $\checkmark$ & $\checkmark$ \\
+\hline
+Password length & $\checkmark$ & $\checkmark$ \\
+\hline
+Session token & N/A & $\checkmark$ \\
+\hline
+User permissions & N/A & $\checkmark$ \\
+\hline
+Rate limiting & N/A & $\checkmark$ \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Error Handling}
+
+\begin{table}[H]
+\centering
+\caption{Error Handling theo Layer}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Layer} & \textbf{Xử lý lỗi} \\
+\hline
+Network & Timeout, retry, reconnect \\
+\hline
+Protocol & JSON parse error, invalid message type \\
+\hline
+Business & Validation failed, resource not found \\
+\hline
+Security & Auth failed, permission denied \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== CHAPTER 12: ĐÁNH GIÁ ỨNG DỤNG =====
+\chapter{Đánh Giá Ứng Dụng}
+
+\section{Ưu Điểm}
+
+\subsection{Kiến Trúc}
+
+\begin{table}[H]
+\centering
+\caption{Ưu điểm về kiến trúc}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Ưu điểm} & \textbf{Mô tả} \\
+\hline
+Layered Architecture & Phân tầng rõ ràng, dễ bảo trì \\
+\hline
+Protocol-based & Giao thức JSON linh hoạt, dễ debug \\
+\hline
+Modular Design & Các module độc lập, dễ mở rộng \\
+\hline
+Service Layer & Business logic tách biệt, dễ test \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Chức Năng}
+
+\begin{table}[H]
+\centering
+\caption{Ưu điểm về chức năng}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Ưu điểm} & \textbf{Mô tả} \\
+\hline
+Đa dạng & Nhiều hình thức học tập \\
+\hline
+Real-time & Chat và Voice Call real-time \\
+\hline
+Phân quyền & Hệ thống role rõ ràng \\
+\hline
+Multimedia & Hỗ trợ hình ảnh, audio \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Nhược Điểm}
+
+\begin{table}[H]
+\centering
+\caption{Nhược điểm và giải pháp đề xuất}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Nhược điểm} & \textbf{Mô tả} & \textbf{Giải pháp đề xuất} \\
+\hline
+In-memory storage & Dữ liệu mất khi restart & Tích hợp SQLite/PostgreSQL \\
+\hline
+Single server & Không scale được & Implement load balancer \\
+\hline
+No encryption & Dữ liệu truyền plaintext & Thêm TLS/SSL \\
+\hline
+Blocking I/O & Có thể bottleneck & Chuyển sang async I/O \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Khả Năng Mở Rộng}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1cm,
+    box/.style={rectangle, draw, rounded corners, minimum width=2.5cm, minimum height=0.6cm, align=center, font=\small},
+    arrow/.style={->, >=stealth, thick}
+]
+    % Current
+    \node[box, fill=green!20] (current1) at (0,2) {Single Server};
+    \node[box, fill=green!20] (current2) at (0,1) {In-Memory Data};
+    \node[box, fill=green!20] (current3) at (0,0) {Desktop Client};
+    \node at (0,3) {\textbf{Hiện tại}};
+
+    % Near term
+    \node[box, fill=yellow!20] (near1) at (5,2) {Database};
+    \node[box, fill=yellow!20] (near2) at (5,1) {File Storage};
+    \node[box, fill=yellow!20] (near3) at (5,0) {Web Client};
+    \node at (5,3) {\textbf{Mở rộng gần}};
+
+    % Long term
+    \node[box, fill=blue!20] (long1) at (10,2) {Microservices};
+    \node[box, fill=blue!20] (long2) at (10,1) {Cloud Deploy};
+    \node[box, fill=blue!20] (long3) at (10,0) {Mobile Apps};
+    \node at (10,3) {\textbf{Mở rộng xa}};
+
+    % Arrows
+    \draw[arrow] (current1) -- (near1);
+    \draw[arrow] (current2) -- (near1);
+    \draw[arrow] (current3) -- (near3);
+    \draw[arrow] (near1) -- (long1);
+    \draw[arrow] (near3) -- (long3);
+    \draw[arrow] (long1) -- (long2);
+\end{tikzpicture}
+\caption{Lộ trình mở rộng hệ thống}
+\end{figure}
+
+\section{Hướng Phát Triển Trong Tương Lai}
+
+\subsection{Ngắn Hạn (1-3 tháng)}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Tính năng} & \textbf{Mô tả} & \textbf{Độ ưu tiên} \\
+\hline
+Database Integration & SQLite/PostgreSQL & Cao \\
+\hline
+SSL/TLS & Mã hóa giao tiếp & Cao \\
+\hline
+Password Hashing & Bảo mật mật khẩu & Cao \\
+\hline
+Web Client & React/Vue frontend & Trung bình \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Trung Hạn (3-6 tháng)}
+
+\begin{itemize}
+    \item Real Audio/Video Call với WebRTC integration
+    \item Mobile App với React Native/Flutter
+    \item Admin Dashboard quản lý nội dung, users
+    \item Analytics thống kê học tập
+\end{itemize}
+
+\subsection{Dài Hạn (6-12 tháng)}
+
+\begin{itemize}
+    \item AI Tutor - Chatbot hỗ trợ học tập
+    \item Speech Recognition - Chấm điểm phát âm tự động
+    \item Adaptive Learning - Cá nhân hóa lộ trình học
+    \item Gamification - Hệ thống điểm, achievements
+    \item Social Features - Bạn bè, nhóm học tập
+\end{itemize}
+
+\section{Kết Luận}
+
+\textbf{English Learning Application} là một hệ thống học tiếng Anh hoàn chỉnh với kiến trúc Client-Server vững chắc. Ứng dụng cung cấp đầy đủ các tính năng cần thiết cho việc học tập:
+
+\begin{itemize}
+    \item[$\checkmark$] Hệ thống bài học phân cấp
+    \item[$\checkmark$] Bài thi với chấm điểm tự động
+    \item[$\checkmark$] Bài tập với phản hồi từ giáo viên
+    \item[$\checkmark$] Game học tập tương tác
+    \item[$\checkmark$] Chat real-time
+    \item[$\checkmark$] Voice Call
+\end{itemize}
+
+Với thiết kế module và protocol rõ ràng, ứng dụng có thể dễ dàng mở rộng và cải tiến trong tương lai để đáp ứng nhu cầu ngày càng cao của người dùng.
+
+% ===== APPENDIX =====
+\appendix
+
+\chapter{Danh Sách Message Types}
+
+\begin{lstlisting}[caption=Danh sách đầy đủ Message Types]
+// Authentication
+REGISTER_REQUEST, REGISTER_RESPONSE
+LOGIN_REQUEST, LOGIN_RESPONSE
+
+// Lessons
+GET_LESSONS_REQUEST, GET_LESSONS_RESPONSE
+GET_LESSON_DETAIL_REQUEST, GET_LESSON_DETAIL_RESPONSE
+
+// Tests
+GET_TEST_REQUEST, GET_TEST_RESPONSE
+SUBMIT_TEST_REQUEST, SUBMIT_TEST_RESPONSE
+
+// Exercises
+GET_EXERCISES_REQUEST, GET_EXERCISES_RESPONSE
+SUBMIT_EXERCISE_REQUEST, SUBMIT_EXERCISE_RESPONSE
+GRADE_SUBMISSION_REQUEST, GRADE_SUBMISSION_RESPONSE
+
+// Games
+GET_GAME_LIST_REQUEST, GET_GAME_LIST_RESPONSE
+START_GAME_REQUEST, START_GAME_RESPONSE
+SUBMIT_GAME_RESULT_REQUEST, SUBMIT_GAME_RESULT_RESPONSE
+
+// Chat
+SEND_MESSAGE_REQUEST, SEND_MESSAGE_RESPONSE
+GET_CHAT_HISTORY_REQUEST, GET_CHAT_HISTORY_RESPONSE
+CHAT_MESSAGE_NOTIFICATION
+UNREAD_MESSAGES_NOTIFICATION
+
+// Voice Call
+INITIATE_CALL_REQUEST, INITIATE_CALL_RESPONSE
+ACCEPT_CALL_REQUEST, REJECT_CALL_REQUEST
+END_CALL_REQUEST
+INCOMING_CALL_NOTIFICATION
+CALL_ACCEPTED_NOTIFICATION
+CALL_REJECTED_NOTIFICATION
+CALL_ENDED_NOTIFICATION
+\end{lstlisting}
+
+\chapter{Công Nghệ Sử Dụng}
+
+\begin{table}[H]
+\centering
+\caption{Danh sách công nghệ sử dụng}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Thành phần} & \textbf{Công nghệ} \\
+\hline
+Ngôn ngữ & C++17 \\
+\hline
+GUI Framework & GTK3 \\
+\hline
+Network & POSIX Sockets \\
+\hline
+Threading & std::thread, pthread \\
+\hline
+JSON Parsing & Custom parser \\
+\hline
+Image Loading & GdkPixbuf, curl \\
+\hline
+Build System & Make \\
+\hline
+\end{tabular}
+\end{table}
+
+\chapter{Cấu Trúc Thư Mục}
+
+\begin{lstlisting}[caption=Cấu trúc thư mục dự án]
+EnglishLearning/
+|-- include/
+|   |-- core/           # Domain models
+|   |-- protocol/       # Message types, JSON parser
+|   |-- repository/     # Data access interfaces
+|   |-- service/        # Business logic interfaces
+|-- src/
+|   |-- protocol/       # JSON parser implementation
+|   |-- repository/     # Repository implementations
+|   |-- service/        # Service implementations
+|-- doc/                # Documentation
+|-- server.cpp          # Server entry point
+|-- client.cpp          # Terminal client
+|-- gui_main.cpp        # GUI client
+|-- client_bridge.h     # Shared client code
+|-- Makefile            # Build configuration
+\end{lstlisting}
+
+% ===== END DOCUMENT =====
+\end{document}
